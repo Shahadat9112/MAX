@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">MAX AI</string>
+    <string name="assistant_name">MAX</string>
+    <string name="wake_word_badge">Wake: \"MAX\"</string>
+    <string name="status_idle">Say \"MAX\" or tap mic</string>
+    <string name="status_listening">Listening…</string>
+    <string name="status_thinking">Thinking…</string>
+    <string name="status_speaking">Speaking…</string>
+    <string name="input_placeholder">Ask MAX in English or বাংলা…</string>
+    <string name="send_message">Send message</string>
+    <string name="voice_command">Start voice command</string>
+    <string name="stop_listening">Stop listening</string>
+    <string name="open_camera">Open camera</string>
+    <string name="open_settings">Assistant settings</string>
+    <string name="toggle_voice">Toggle voice output</string>
+    <string name="confirm_call">Call</string>
+    <string name="confirm_send_sms">Send SMS</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="grant_permission">Grant</string>
+    <string name="capture_photo">Capture photo</string>
+    <string name="close_camera">Close camera</string>
+    <string name="switch_camera">Switch camera</string>
+    <string name="wake_service_channel_name">MAX Wake Word Listener</string>
+    <string name="wake_service_notification_title">MAX AI is listening</string>
+    <string name="wake_service_notification_text">Say \"MAX\" anytime to activate</string>
+</resources>
