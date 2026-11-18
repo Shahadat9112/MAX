@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "max_ai_prefs")
 
+/**
+ * Immutable snapshot of user settings stored in Jetpack DataStore.
+ */
 data class UserPreferences(
     val ttsEnabled: Boolean = true,
     val backgroundWakeWordEnabled: Boolean = true,
@@ -22,6 +25,9 @@ data class UserPreferences(
     val saveHistoryConsent: Boolean = false
 )
 
+/**
+ * DataStore-backed persistence layer for MAX AI voice, language, and privacy preferences.
+ */
 class UserPreferencesRepository(private val context: Context) {
     private object Keys {
         val TTS_ENABLED = booleanPreferencesKey("tts_enabled")

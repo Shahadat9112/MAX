@@ -7,11 +7,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Event emitted when the background wake-word service detects "Hey MAX" or "MAX".
+ */
 data class WakeTriggerEvent(
     val command: String,
     val timestamp: Long = System.currentTimeMillis()
 )
 
+/**
+ * Shared thread-safe state hub coordinating microphone ownership, active phone calls,
+ * background service status, and wake-trigger events across components.
+ */
 object WakeWordCoordinator {
     private val _isServiceRunning = MutableStateFlow(false)
     val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()

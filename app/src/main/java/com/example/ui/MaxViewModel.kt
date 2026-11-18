@@ -7,11 +7,14 @@ import com.example.data.ChatMessageEntity
 import com.example.data.UserPreferences
 import com.example.domain.AssistantStatus
 import com.example.domain.PendingAction
+import com.example.core.MAXCore
 import com.example.domain.VoiceLanguage
-import com.example.service.MaxAssistantController
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * Immutable UI state snapshot rendered by MAX AI's Jetpack Compose screens.
+ */
 data class MaxUiState(
     val status: AssistantStatus = AssistantStatus.IDLE,
     val messages: List<ChatMessageEntity> = emptyList(),
@@ -30,8 +33,11 @@ data class MaxUiState(
     val bannerError: String? = null
 )
 
+/**
+ * Compatibility ViewModel in [com.example.ui] delegating state and actions to [MAXCore].
+ */
 class MaxViewModel(application: Application) : AndroidViewModel(application) {
-    private val controller = MaxAssistantController.getInstance(application.applicationContext)
+    private val controller = MAXCore.getInstance(application.applicationContext)
 
     val uiState: StateFlow<MaxUiState> = controller.uiState
     val permissionRequests: SharedFlow<Array<String>> = controller.permissionRequests

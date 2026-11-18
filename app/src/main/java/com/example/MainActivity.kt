@@ -17,18 +17,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ai.configureAppCheck
 import com.example.service.VoiceActivationService
 import com.example.ui.MaxAssistantScreen
-import com.example.ui.MaxViewModel
 import com.example.ui.components.PermissionRationaleDialog
 import com.example.ui.components.maxCorePermissionsList
 import com.example.ui.theme.MaxAiTheme
+import com.example.viewmodel.MaxAssistantViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.shouldShowRationale
 
+/**
+ * Single-activity Jetpack Compose entry point hosting the MAX AI interface,
+ * runtime permission orchestration, and wake-word launch intent handling.
+ */
 class MainActivity : ComponentActivity() {
-    private val viewModel: MaxViewModel by viewModels()
+    private val viewModel: MaxAssistantViewModel by viewModels()
 
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {

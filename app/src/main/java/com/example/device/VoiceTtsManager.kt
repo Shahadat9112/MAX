@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 import java.util.UUID
 
+/**
+ * Manages bilingual Android Text-to-Speech synthesis with warm male voice and pitch tuning.
+ */
 class VoiceTtsManager(context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null

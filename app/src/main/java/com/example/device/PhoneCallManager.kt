@@ -7,6 +7,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.core.content.ContextCompat
 
+/**
+ * Initiates direct phone calls when CALL_PHONE is granted or falls back to the system dialer.
+ */
 class PhoneCallManager(private val context: Context) {
 
     fun makeCall(phoneNumber: String): Result<Boolean> {

@@ -18,6 +18,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
+/**
+ * Firebase AI Logic client invoking Gemini models for bilingual conversation,
+ * structured action routing, multimodal voice fallback, and wake-word verification.
+ */
 class MaxAiService {
     private val decisionSchema = Schema.obj(
         properties = mapOf(

@@ -7,6 +7,9 @@ import android.os.Build
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 
+/**
+ * Dispatches single and multipart SMS text messages after verifying SEND_SMS permission.
+ */
 class SmsHelper(private val context: Context) {
 
     fun hasSendSmsPermission(): Boolean {

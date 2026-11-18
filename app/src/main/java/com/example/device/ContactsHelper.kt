@@ -4,6 +4,9 @@ import android.content.Context
 import android.provider.ContactsContract
 import com.example.domain.ContactMatch
 
+/**
+ * Queries the device contacts provider locally with English and Bengali relationship-alias expansion.
+ */
 class ContactsHelper(private val context: Context) {
 
     fun findContacts(query: String): List<ContactMatch> {
