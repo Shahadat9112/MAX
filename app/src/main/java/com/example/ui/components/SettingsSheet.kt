@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,8 +71,11 @@ fun SettingsSheet(
     onSelectLanguage: (VoiceLanguage) -> Unit,
     onToggleTts: () -> Unit,
     onToggleAutoListen: (Boolean) -> Unit,
+    onToggleStrictPrivacy: (Boolean) -> Unit,
+    onToggleSaveHistoryConsent: (Boolean) -> Unit,
     onRequestPermission: (String) -> Unit,
     onClearChat: () -> Unit,
+    onEraseAllData: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -228,6 +232,82 @@ fun SettingsSheet(
                 )
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Zero-Leak Privacy Shield Card
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = DarkBlueCard,
+                border = BorderStroke(
+                    1.dp,
+                    if (preferences.strictPrivacyMode) SuccessMint.copy(alpha = 0.65f) else SubtleBlueBorder
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = if (preferences.strictPrivacyMode) SuccessMint else SlateBlueSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Zero-Leak Privacy Shield",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = IceBlueText
+                            )
+                            Text(
+                                text = "Block background audio upload; auto-redact phone numbers, emails, OTPs & PINs",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateBlueSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.strictPrivacyMode,
+                            onCheckedChange = onToggleStrictPrivacy,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ObsidianBlack,
+                                checkedTrackColor = SuccessMint
+                            ),
+                            modifier = Modifier.testTag("strict_privacy_switch")
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Save Chat History on Device",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = IceBlueText
+                            )
+                            Text(
+                                text = "Off by default — nothing is saved to disk or published without your permission",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlateBlueSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.saveHistoryConsent,
+                            onCheckedChange = onToggleSaveHistoryConsent,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ObsidianBlack,
+                                checkedTrackColor = ElectricBlue
+                            ),
+                            modifier = Modifier.testTag("save_history_consent_switch")
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Zero silent storage: chats stay in volatile RAM unless you allow saving\n• Never published, shared, or backed up to cloud (allowBackup=false)\n• Contacts, Calls, SMS & Photos never leave your device\n• Raw audio buffers wiped from RAM immediately",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SlateBlueSecondary
+                    )
+                }
+            }
+
             HorizontalDivider(color = SubtleBlueBorder, modifier = Modifier.padding(vertical = 12.dp))
 
             // Accompanist Permissions Checklist
@@ -299,13 +379,16 @@ fun SettingsSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedButton(
-                    onClick = onClearChat,
+                    onClick = {
+                        onEraseAllData()
+                        onClearChat()
+                    },
                     border = BorderStroke(1.dp, AlertRed.copy(alpha = 0.6f)),
-                    modifier = Modifier.testTag("clear_chat_button")
+                    modifier = Modifier.testTag("erase_all_data_button")
                 ) {
                     Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = AlertRed, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Clear Chat", color = AlertRed)
+                    Text("Erase All Data", color = AlertRed)
                 }
 
                 TextButton(onClick = onDismiss) {

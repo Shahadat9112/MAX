@@ -17,7 +17,9 @@ data class UserPreferences(
     val ttsEnabled: Boolean = true,
     val backgroundWakeWordEnabled: Boolean = true,
     val preferredLanguage: VoiceLanguage = VoiceLanguage.AUTO,
-    val autoListenAfterReply: Boolean = false
+    val autoListenAfterReply: Boolean = false,
+    val strictPrivacyMode: Boolean = true,
+    val saveHistoryConsent: Boolean = false
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -26,6 +28,8 @@ class UserPreferencesRepository(private val context: Context) {
         val WAKE_WORD_BG = booleanPreferencesKey("wake_word_background_enabled")
         val PREFERRED_LANG = stringPreferencesKey("preferred_language")
         val AUTO_LISTEN = booleanPreferencesKey("auto_listen_after_reply")
+        val STRICT_PRIVACY = booleanPreferencesKey("strict_privacy_mode")
+        val SAVE_HISTORY_CONSENT = booleanPreferencesKey("save_history_consent")
     }
 
     val preferencesFlow: Flow<UserPreferences> = context.dataStore.data.map { prefs ->
@@ -36,7 +40,9 @@ class UserPreferencesRepository(private val context: Context) {
             ttsEnabled = prefs[Keys.TTS_ENABLED] ?: true,
             backgroundWakeWordEnabled = prefs[Keys.WAKE_WORD_BG] ?: true,
             preferredLanguage = language,
-            autoListenAfterReply = prefs[Keys.AUTO_LISTEN] ?: false
+            autoListenAfterReply = prefs[Keys.AUTO_LISTEN] ?: false,
+            strictPrivacyMode = prefs[Keys.STRICT_PRIVACY] ?: true,
+            saveHistoryConsent = prefs[Keys.SAVE_HISTORY_CONSENT] ?: false
         )
     }
 
@@ -54,5 +60,13 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setAutoListenAfterReply(enabled: Boolean) {
         context.dataStore.edit { it[Keys.AUTO_LISTEN] = enabled }
+    }
+
+    suspend fun setStrictPrivacyMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.STRICT_PRIVACY] = enabled }
+    }
+
+    suspend fun setSaveHistoryConsent(consented: Boolean) {
+        context.dataStore.edit { it[Keys.SAVE_HISTORY_CONSENT] = consented }
     }
 }

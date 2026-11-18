@@ -29,6 +29,7 @@ import com.example.domain.AssistantStatus
 import com.example.domain.ContactMatch
 import com.example.domain.OfflineCommandEngine
 import com.example.domain.PendingAction
+import com.example.domain.PrivacyGuard
 import com.example.domain.VoiceLanguage
 import com.example.domain.WakeWordParser
 import com.example.domain.WakeWordResult
@@ -45,13 +46,15 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * Application-scoped assistant brain shared by both MaxViewModel (foreground UI)
- * and MaxWakeWordService (background / screen-off wake-word execution).
+ * and VoiceActivationService (background / screen-off wake-word execution).
  */
 class MaxAssistantController private constructor(context: Context) {
     private val appContext = context.applicationContext
@@ -157,6 +160,15 @@ class MaxAssistantController private constructor(context: Context) {
     )
 
     init {
+        scope.launch {
+            prefsRepository.preferencesFlow
+                .map { it.saveHistoryConsent }
+                .distinctUntilChanged()
+                .collect { consented ->
+                    chatRepository.setStorageConsent(consented)
+                }
+        }
+
         voiceTts.onSpeechCompleted = {
             scope.launch {
                 val shouldListen = pendingVoiceFollowUpAfterTts ||
@@ -175,7 +187,7 @@ class MaxAssistantController private constructor(context: Context) {
             hasPermission(Manifest.permission.RECORD_AUDIO) &&
             !WakeWordCoordinator.isServiceRunning.value
         ) {
-            MaxWakeWordService.start(appContext)
+            VoiceActivationService.start(appContext)
         }
     }
 
@@ -265,7 +277,7 @@ class MaxAssistantController private constructor(context: Context) {
                 chatRepository.addMessage(isUser = true, text = transcript, language = userLang)
                 executeDecision(decision, isOffline = false, fromVoice = true)
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Audio AI request timed out", e)
+                Log.e(TAG, "Audio AI request timed out")
                 chatRepository.addMessage(
                     isUser = false,
                     text = "Voice processing timed out. Please try again.",
@@ -274,13 +286,14 @@ class MaxAssistantController private constructor(context: Context) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Audio AI request failed", e)
+                Log.e(TAG, "Audio AI request failed (${e.javaClass.simpleName})")
                 chatRepository.addMessage(
                     isUser = false,
                     text = "Voice AI error: ${e.localizedMessage ?: "Unable to process voice."}",
                     isError = true
                 )
             } finally {
+                PrivacyGuard.wipeBuffer(wavBytes)
                 _isThinking.value = false
             }
         }
@@ -901,6 +914,35 @@ class MaxAssistantController private constructor(context: Context) {
         }
     }
 
+    fun setStrictPrivacyMode(enabled: Boolean) {
+        scope.launch {
+            prefsRepository.setStrictPrivacyMode(enabled)
+        }
+    }
+
+    fun setSaveHistoryConsent(consented: Boolean) {
+        scope.launch {
+            prefsRepository.setSaveHistoryConsent(consented)
+            chatRepository.setStorageConsent(consented)
+        }
+    }
+
+    fun eraseAllLocalData() {
+        scope.launch {
+            chatRepository.clearHistory()
+            _pendingAction.value = null
+            _bannerError.value = null
+            _lastPhotoUri.value = null
+            pendingSmsToSendAfterPermission = null
+            lastCommandToRetryAfterPermission = null
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    appContext.cacheDir?.listFiles()?.forEach { it.deleteRecursively() }
+                }
+            }
+        }
+    }
+
     fun toggleBackgroundWakeWord(enabled: Boolean) {
         scope.launch {
             if (enabled) {
@@ -918,10 +960,10 @@ class MaxAssistantController private constructor(context: Context) {
                     return@launch
                 }
                 prefsRepository.setBackgroundWakeWordEnabled(true)
-                MaxWakeWordService.start(appContext)
+                VoiceActivationService.start(appContext)
             } else {
                 prefsRepository.setBackgroundWakeWordEnabled(false)
-                MaxWakeWordService.stop(appContext)
+                VoiceActivationService.stop(appContext)
             }
         }
     }

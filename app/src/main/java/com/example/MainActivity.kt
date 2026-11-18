@@ -15,7 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ai.configureAppCheck
-import com.example.service.MaxWakeWordService
+import com.example.service.VoiceActivationService
 import com.example.ui.MaxAssistantScreen
 import com.example.ui.MaxViewModel
 import com.example.ui.components.PermissionRationaleDialog
@@ -113,6 +113,8 @@ class MainActivity : ComponentActivity() {
                     onSelectLanguage = viewModel::setLanguage,
                     onCycleLanguage = viewModel::cycleLanguage,
                     onToggleAutoListen = viewModel::setAutoListen,
+                    onToggleStrictPrivacy = viewModel::setStrictPrivacyMode,
+                    onToggleSaveHistoryConsent = viewModel::setSaveHistoryConsent,
                     onToggleBackgroundWake = viewModel::toggleBackgroundWakeWord,
                     onOpenCamera = { viewModel.openCameraScreen(autoCapture = false) },
                     onPhotoCaptured = viewModel::onPhotoSaved,
@@ -124,6 +126,7 @@ class MainActivity : ComponentActivity() {
                     onCancelPending = viewModel::cancelPendingAction,
                     onRequestPermission = { perm -> viewModel.requestPermissions(arrayOf(perm)) },
                     onClearChat = viewModel::clearConversation,
+                    onEraseAllData = viewModel::eraseAllLocalData,
                     onDismissBannerError = viewModel::dismissBannerError
                 )
 
@@ -149,8 +152,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleWakeIntent(intent: Intent?) {
-        if (intent?.action == MaxWakeWordService.ACTION_WAKE_TRIGGERED) {
-            val command = intent.getStringExtra(MaxWakeWordService.EXTRA_WAKE_COMMAND).orEmpty()
+        if (intent?.action == VoiceActivationService.ACTION_WAKE_TRIGGERED) {
+            val command = intent.getStringExtra(VoiceActivationService.EXTRA_WAKE_COMMAND).orEmpty()
             intent.action = null
             viewModel.handleWakeWordTriggered(command)
         }

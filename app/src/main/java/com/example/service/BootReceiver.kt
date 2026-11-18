@@ -29,7 +29,7 @@ class BootReceiver : BroadcastReceiver() {
                 ) == PackageManager.PERMISSION_GRANTED
 
                 if (prefs.backgroundWakeWordEnabled && hasMic) {
-                    MaxWakeWordService.start(context)
+                    VoiceActivationService.start(context)
                 }
             } finally {
                 pendingResult.finish()

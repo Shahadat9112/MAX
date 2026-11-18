@@ -101,6 +101,8 @@ fun MaxAssistantScreen(
     onSelectLanguage: (VoiceLanguage) -> Unit,
     onCycleLanguage: () -> Unit,
     onToggleAutoListen: (Boolean) -> Unit,
+    onToggleStrictPrivacy: (Boolean) -> Unit,
+    onToggleSaveHistoryConsent: (Boolean) -> Unit,
     onToggleBackgroundWake: (Boolean) -> Unit,
     onOpenCamera: () -> Unit,
     onPhotoCaptured: (Uri) -> Unit,
@@ -112,6 +114,7 @@ fun MaxAssistantScreen(
     onCancelPending: () -> Unit,
     onRequestPermission: (String) -> Unit,
     onClearChat: () -> Unit,
+    onEraseAllData: () -> Unit,
     onDismissBannerError: () -> Unit
 ) {
     var inputText by remember { mutableStateOf("") }
@@ -294,8 +297,11 @@ fun MaxAssistantScreen(
                 onSelectLanguage = onSelectLanguage,
                 onToggleTts = onToggleTts,
                 onToggleAutoListen = onToggleAutoListen,
+                onToggleStrictPrivacy = onToggleStrictPrivacy,
+                onToggleSaveHistoryConsent = onToggleSaveHistoryConsent,
                 onRequestPermission = onRequestPermission,
                 onClearChat = onClearChat,
+                onEraseAllData = onEraseAllData,
                 onDismiss = { showSettings = false }
             )
         }

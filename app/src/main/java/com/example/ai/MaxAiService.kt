@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.data.ChatMessageEntity
 import com.example.domain.AiDecision
 import com.example.domain.AssistantActionType
+import com.example.domain.PrivacyGuard
 import com.example.domain.VoiceLanguage
 import com.example.domain.WakeWordParser
 import com.google.firebase.Firebase
@@ -96,11 +97,12 @@ class MaxAiService {
     ): AiDecision = withContext(Dispatchers.IO) {
         val historyContent = buildHistory(recentHistory)
         val languageHint = buildLanguageHint(preferredLanguage)
+        val safeInput = PrivacyGuard.sanitizeForExternalAi(userInput)
 
         val accumulated = StringBuilder()
         withTimeout(45_000L) {
             val chat = model.startChat(history = historyContent)
-            chat.sendMessageStream(userInput + languageHint).collect { chunk ->
+            chat.sendMessageStream(safeInput + languageHint).collect { chunk ->
                 chunk.text?.let { accumulated.append(it) }
             }
         }
@@ -109,7 +111,7 @@ class MaxAiService {
             throw IllegalStateException("Empty response from MAX AI.")
         }
 
-        parseDecision(responseText, userInput).second
+        parseDecision(responseText, safeInput).second
     }
 
     suspend fun sendAudioMessage(
@@ -142,19 +144,72 @@ class MaxAiService {
         parseDecision(responseText, "[Voice message]")
     }
 
+    suspend fun detectWakeWordInAudio(
+        wavBytes: ByteArray,
+        preferredLanguage: VoiceLanguage
+    ): String? = withContext(Dispatchers.IO) {
+        val wakeSchema = Schema.obj(
+            properties = mapOf(
+                "heardWakeWord" to Schema.boolean(
+                    description = "True only if the speaker clearly said 'Hey MAX', 'MAX', 'OK MAX', or Bengali 'হে ম্যাক্স' / 'ম্যাক্স'."
+                ),
+                "transcript" to Schema.string(
+                    description = "Exact short transcript of what was spoken, or empty string if unclear/noise.",
+                    nullable = true
+                )
+            ),
+            optionalProperties = listOf("transcript")
+        )
+        val wakeModel = Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = wakeSchema
+                temperature = 0.1f
+            },
+            systemInstruction = content {
+                text(
+                    "You are a fast wake-word detector for MAX AI. Listen carefully for 'Hey MAX', 'MAX', 'OK MAX', or Bengali 'হে ম্যাক্স' / 'ম্যাক্স'. Return heardWakeWord=true only when the wake word is spoken, along with the exact transcript."
+                )
+            }
+        )
+        val langHint = buildLanguageHint(preferredLanguage)
+        val response = withTimeout(12_000L) {
+            wakeModel.generateContent(
+                content {
+                    inlineData(wavBytes, "audio/wav")
+                    text("Check if the speaker said the wake word 'Hey MAX' or 'MAX'.$langHint")
+                }
+            )
+        }
+        val raw = response.text ?: return@withContext null
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@withContext null
+        val heard = json.optBoolean("heardWakeWord", false)
+        val transcript = json.optString("transcript").takeIf { it.isNotBlank() && it != "null" }
+        if (heard && transcript != null) transcript else null
+    }
+
     private fun buildHistory(recentHistory: List<ChatMessageEntity>) =
         recentHistory
-            .filter { !it.isError && it.text.isNotBlank() }
+            .filter { msg ->
+                msg.text.isNotBlank() &&
+                    !PrivacyGuard.shouldExcludeFromCloudHistory(
+                        actionBadge = msg.actionBadge,
+                        isOffline = msg.isOffline,
+                        isError = msg.isError
+                    )
+            }
             .takeLast(12)
             .map { msg ->
+                val safeText = PrivacyGuard.sanitizeForExternalAi(msg.text)
                 val role = if (msg.isUser) "user" else "model"
                 content(role) {
                     text(
                         if (msg.isUser) {
-                            msg.text
+                            safeText
                         } else {
                             JSONObject().apply {
-                                put("reply", msg.text)
+                                put("reply", safeText)
                                 put("language", msg.language)
                                 put("action", AssistantActionType.NONE.name)
                             }.toString()
@@ -203,7 +258,7 @@ class MaxAiService {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse JSON response: $jsonString", e)
+            Log.e(TAG, "Failed to parse AI JSON response (${e.javaClass.simpleName})")
             fallbackInput to AiDecision(
                 reply = jsonString,
                 language = if (WakeWordParser.isBengaliText(jsonString)) "bn" else "en",

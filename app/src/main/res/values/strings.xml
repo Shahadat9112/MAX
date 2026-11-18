@@ -22,5 +22,5 @@
     <string name="switch_camera">Switch camera</string>
     <string name="wake_service_channel_name">MAX Wake Word Listener</string>
     <string name="wake_service_notification_title">MAX AI is listening</string>
-    <string name="wake_service_notification_text">Say \"MAX\" anytime to activate</string>
+    <string name="wake_service_notification_text">Say \"Hey MAX\" anytime to activate</string>
 </resources>

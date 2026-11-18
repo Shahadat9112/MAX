@@ -127,11 +127,16 @@ class AudioCaptureRecorder {
             }
 
             val pcmBytes = pcmOut.toByteArray()
+            pcmOut.reset()
+            com.example.domain.PrivacyGuard.wipeBuffer(buffer)
             withContext(Dispatchers.Main) {
                 if (pcmBytes.size < 3200 || !speechDetected) {
+                    com.example.domain.PrivacyGuard.wipeBuffer(pcmBytes)
                     onError("No voice detected. Tap mic and speak clearly.")
                 } else {
-                    onCaptured(pcmToWav(pcmBytes, sampleRate))
+                    val wav = pcmToWav(pcmBytes, sampleRate)
+                    com.example.domain.PrivacyGuard.wipeBuffer(pcmBytes)
+                    onCaptured(wav)
                 }
             }
         }
