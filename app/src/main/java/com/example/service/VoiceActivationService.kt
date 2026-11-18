@@ -38,6 +38,7 @@ import com.example.domain.PrivacyGuard
 import com.example.domain.VoiceLanguage
 import com.example.domain.WakeWordParser
 import com.example.domain.WakeWordResult
+import com.example.wakeword.WakeWordConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -123,8 +124,11 @@ class VoiceActivationService : Service() {
     @Volatile
     private var currentLanguage: VoiceLanguage = VoiceLanguage.AUTO
 
-    @Volatile
-    private var strictPrivacyMode: Boolean = true
+    @VisibleForTesting
+    internal var wakeConfig: WakeWordConfig = WakeWordConfig()
+
+    @VisibleForTesting
+    internal var strictPrivacyMode: Boolean = true
 
     private var monitoringJob: Job? = null
     private var coordinatorJob: Job? = null
@@ -310,9 +314,11 @@ class VoiceActivationService : Service() {
                 "Continuous audio monitoring must not run on the main UI thread"
             }
 
-            val frameSizeSamples = (SAMPLE_RATE * FRAME_DURATION_MS) / 1000 // 512 samples @ 16kHz (~32ms)
+            val sampleRate = wakeConfig.sampleRateHz
+            val frameDurationMs = wakeConfig.frameDurationMs
+            val frameSizeSamples = (sampleRate * frameDurationMs) / 1000
             val frameBuffer = ShortArray(frameSizeSamples)
-            val preRollMaxFrames = PRE_ROLL_MS / FRAME_DURATION_MS
+            val preRollMaxFrames = wakeConfig.preRollMs / frameDurationMs
             val preRollFrames = ArrayDeque<ShortArray>(preRollMaxFrames + 1)
 
             while (isActive &&
@@ -321,7 +327,7 @@ class VoiceActivationService : Service() {
                 !WakeWordCoordinator.isCallActive.value
             ) {
                 val session = runCatching {
-                    audioFrameSource.openStream(SAMPLE_RATE, frameSizeSamples)
+                    audioFrameSource.openStream(sampleRate, frameSizeSamples)
                 }.getOrNull()
 
                 if (session == null) {
@@ -375,7 +381,7 @@ class VoiceActivationService : Service() {
                             }
 
                             val cooldownElapsed =
-                                System.currentTimeMillis() - lastEvaluationTimestampMs >= EVALUATION_COOLDOWN_MS
+                                System.currentTimeMillis() - lastEvaluationTimestampMs >= wakeConfig.cooldownMs
 
                             if (consecutiveSpeechFrames >= ONSET_CONSECUTIVE_FRAMES && cooldownElapsed) {
                                 capturingUtterance = true
@@ -390,7 +396,7 @@ class VoiceActivationService : Service() {
                             }
                         } else {
                             writePcmLe16(pcmOut, frameBuffer, read)
-                            val frameMs = (read * 1000L) / SAMPLE_RATE
+                            val frameMs = (read * 1000L) / sampleRate
 
                             if (isSpeechFrame) {
                                 speechFrameCount++
@@ -400,11 +406,12 @@ class VoiceActivationService : Service() {
                             }
 
                             val utteranceDurationMs = System.currentTimeMillis() - utteranceStartMs
+                            // Cap wake inspection to short wake-phrase window; never record long conversations
                             if (silenceDurationMs >= TRAILING_SILENCE_MS ||
-                                utteranceDurationMs >= MAX_UTTERANCE_MS
+                                utteranceDurationMs >= wakeConfig.maxWakeWindowMs
                             ) {
                                 val capturedPcm = pcmOut.toByteArray()
-                                val speechDurationMs = speechFrameCount * FRAME_DURATION_MS.toLong()
+                                val speechDurationMs = speechFrameCount * frameDurationMs.toLong()
                                 capturingUtterance = false
                                 consecutiveSpeechFrames = 0
                                 speechFrameCount = 0
@@ -415,7 +422,7 @@ class VoiceActivationService : Service() {
                                     capturedPcm.size >= MIN_PCM_BYTES
                                 ) {
                                     lastEvaluationTimestampMs = System.currentTimeMillis()
-                                    val wavBytes = encodePcmToWav(capturedPcm, SAMPLE_RATE)
+                                    val wavBytes = encodePcmToWav(capturedPcm, sampleRate)
                                     val triggered = try {
                                         evaluateAudioSegmentOffMainThread(wavBytes)
                                     } finally {

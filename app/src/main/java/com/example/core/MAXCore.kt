@@ -24,6 +24,10 @@ import com.example.speech.SpeechManager
 import com.example.tts.TTSManager
 import com.example.ui.MaxUiState
 import com.example.utils.PrivacyUtils
+import com.example.wakeword.VoiceConversationConnector
+import com.example.wakeword.WakeWordConfig
+import com.example.wakeword.WakeWordDetectionEvent
+import com.example.wakeword.WakeWordListener
 import com.example.wakeword.WakeWordManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -71,9 +75,19 @@ class MAXCore private constructor(
     private val _permissionRequests = MutableSharedFlow<Array<String>>(extraBufferCapacity = 4)
     val permissionRequests: SharedFlow<Array<String>> = _permissionRequests.asSharedFlow()
 
+    private val _wakeDetectionEvents = MutableSharedFlow<WakeWordDetectionEvent>(extraBufferCapacity = 4)
+    val wakeDetectionEvents: SharedFlow<WakeWordDetectionEvent> = _wakeDetectionEvents.asSharedFlow()
+
     private var lastCommandToRetryAfterPermission: String? = null
     private var pendingSmsToSendAfterPermission: PendingAction.ConfirmSms? = null
     private var pendingVoiceFollowUpAfterTts = false
+
+    private val wakeListener = object : WakeWordListener {
+        override fun onWakeWordDetected(event: WakeWordDetectionEvent) {
+            _wakeDetectionEvents.tryEmit(event)
+            prepareAssistantForWakeResponse(event)
+        }
+    }
 
     val uiState: StateFlow<MaxUiState> = combine(
         memoryManager.messages,
@@ -147,6 +161,8 @@ class MAXCore private constructor(
     )
 
     init {
+        wakeWordManager.addListener(wakeListener)
+
         scope.launch {
             settingsManager.preferencesFlow
                 .map { it.saveHistoryConsent }
@@ -163,9 +179,18 @@ class MAXCore private constructor(
                 pendingVoiceFollowUpAfterTts = false
                 if (shouldListen && !_isCameraOpen.value) {
                     startVoiceListening()
+                } else {
+                    wakeWordManager.notifyConversationEnded()
                 }
             }
         }
+    }
+
+    /**
+     * Attaches a future real-time [VoiceConversationConnector] to wake-word triggers.
+     */
+    fun attachVoiceConversationConnector(connector: VoiceConversationConnector) {
+        wakeWordManager.attachConversationConnector(connector)
     }
 
     fun ensureBackgroundWakeServiceIfEnabled() {
@@ -177,7 +202,19 @@ class MAXCore private constructor(
     }
 
     fun handleWakeWordTriggered(command: String) {
+        wakeWordManager.dispatchWakeDetected(
+            WakeWordDetectionEvent(
+                wakeWord = WakeWordConfig.DEFAULT_WAKE_WORD,
+                trailingCommand = command
+            )
+        )
+    }
+
+    private fun prepareAssistantForWakeResponse(event: WakeWordDetectionEvent) {
         scope.launch {
+            _bannerError.value = null
+            wakeWordManager.setForegroundMicBusy(true)
+            val command = event.trailingCommand
             if (command.isBlank()) {
                 val isBn = uiState.value.preferences.preferredLanguage == VoiceLanguage.BENGALI
                 val prompt = if (isBn) "হ্যাঁ, বলুন।" else "Yes, I'm listening."
