@@ -67,4 +67,11 @@ class EmotionAndConversationModuleTest {
         assertTrue(timeout.contains("সানজু"))
         assertEquals(ConversationState.IDLE_TIMEOUT, manager.conversationState.value)
     }
+
+    @Test
+    fun personalityManager_formatsAndEvaluatesTone() {
+        val formatted = com.example.conversation.PersonalityManager.formatAssistantReply("  Hello Sanju  ")
+        assertEquals("Hello Sanju", formatted)
+        assertTrue(com.example.conversation.PersonalityManager.shouldBeCalm("I am feeling sad and worried"))
+    }
 }

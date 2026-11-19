@@ -5,20 +5,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Conversation lifecycle states for MAX.
- */
-enum class ConversationState {
-    IDLE,
-    GREETING,
-    LISTENING,
-    THINKING,
-    SPEAKING,
-    AWAITING_FOLLOW_UP,
-    FAREWELL,
-    IDLE_TIMEOUT
-}
-
-/**
  * Independent manager coordinating MAX's conversation flow, identity addressing "Sanju" (সানজু),
  * task completion prompts, and idle timeouts.
  */
