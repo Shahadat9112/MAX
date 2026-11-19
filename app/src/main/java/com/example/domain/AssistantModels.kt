@@ -55,6 +55,10 @@ enum class AssistantActionType {
     GET_TIME,
     GET_BATTERY,
     TOGGLE_FLASHLIGHT,
+    SET_ALARM,
+    SET_TIMER,
+    STOPWATCH_CONTROL,
+    CALCULATE,
     CLEAR_CHAT
 }
 

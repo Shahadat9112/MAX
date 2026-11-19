@@ -250,6 +250,54 @@ object OfflineCommandEngine {
             }
         }
 
+        // 9.5 Alarm, Timer, Stopwatch & Calculator (English + Bengali)
+        if (lower.contains("alarm") || lower.contains("অ্যালার্ম") || lower.contains("এলার্ম")) {
+            return AiDecision(
+                reply = if (isBn) "অ্যালার্ম প্রস্তুত করছি।" else "Preparing alarm.",
+                language = lang,
+                action = AssistantActionType.SET_ALARM,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("timer") || lower.contains("টাইমার")) {
+            return AiDecision(
+                reply = if (isBn) "টাইমার চালু করছি।" else "Setting timer.",
+                language = lang,
+                action = AssistantActionType.SET_TIMER,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("stopwatch") || lower.contains("স্টপওয়াচ") || lower.contains("স্টপ ওয়াচ")) {
+            val swAction = when {
+                lower.contains("reset") || lower.contains("রিসেট") -> "reset"
+                lower.contains("lap") || lower.contains("ল্যাপ") -> "lap"
+                lower.contains("pause") || lower.contains("stop") || lower.contains("থামাও") || lower.contains("বন্ধ") -> "pause"
+                lower.contains("resume") || lower.contains("আবার") -> "resume"
+                else -> "start"
+            }
+            return AiDecision(
+                reply = if (isBn) "স্টপওয়াচ নিয়ন্ত্রণ করছি।" else "Updating stopwatch.",
+                language = lang,
+                action = AssistantActionType.STOPWATCH_CONTROL,
+                targetName = swAction
+            )
+        }
+
+        val calcRegex = Regex("""^(?:calculate|compute|math|what is|হিসাব করো|হিসাব)\s+(.+)$""", RegexOption.IGNORE_CASE)
+        calcRegex.find(text)?.let { match ->
+            val expr = match.groupValues[1].trim()
+            if (expr.any { it.isDigit() }) {
+                return AiDecision(
+                    reply = "",
+                    language = lang,
+                    action = AssistantActionType.CALCULATE,
+                    targetName = expr
+                )
+            }
+        }
+
         // 10. Clear Chat
         if (matchesAny(lower, "clear chat", "clear history", "চ্যাট মুছে ফেলো", "হিস্ট্রি ক্লিয়ার করো")) {
             return AiDecision(

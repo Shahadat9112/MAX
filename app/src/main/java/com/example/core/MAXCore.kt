@@ -12,12 +12,14 @@ import com.example.data.UserPreferences
 import com.example.domain.AiDecision
 import com.example.domain.AssistantActionType
 import com.example.domain.AssistantStatus
+import com.example.apps.AppManager
 import com.example.domain.ContactMatch
 import com.example.domain.PendingAction
 import com.example.domain.PrivacyGuard
 import com.example.domain.VoiceLanguage
 import com.example.memory.MemoryManager
 import com.example.permissions.PermissionManager
+import com.example.phone.PhoneManager
 import com.example.repository.AssistantRepository
 import com.example.settings.SettingsManager
 import com.example.speech.SpeechManager
@@ -55,7 +57,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Central application-scoped assistant coordinator that composes all independent
- * MAX managers (WakeWord, Speech, TTS, Memory, Permission, Settings) and the AssistantRepository.
+ * MAX managers (WakeWord, Speech, TTS, Memory, Permission, Settings, Phone, App) and the AssistantRepository.
  *
  * Serves as the single source of truth for both the MVVM ViewModel layer and background services.
  */
@@ -68,7 +70,9 @@ class MAXCore private constructor(
     val settingsManager: SettingsManager,
     val repository: AssistantRepository,
     val emotionManager: EmotionManager,
-    val conversationManager: ConversationManager
+    val conversationManager: ConversationManager,
+    val phoneManager: PhoneManager,
+    val appManager: AppManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -606,7 +610,7 @@ class MAXCore private constructor(
             }
 
             AssistantActionType.TOGGLE_FLASHLIGHT -> {
-                val res = repository.toggleFlashlight()
+                val res = phoneManager.toggleFlashlight(isUserInitiated = true)
                 val msg = res.fold(
                     onSuccess = { on ->
                         if (isBn) {
@@ -618,6 +622,71 @@ class MAXCore private constructor(
                     onFailure = { err -> err.localizedMessage ?: "Flashlight unavailable." }
                 )
                 respondAsMax(msg, lang, actionBadge = "Flashlight", isOffline = isOffline)
+            }
+
+            AssistantActionType.SET_ALARM -> {
+                val raw = decision.targetName.orEmpty()
+                val (hour, minute) = parseAlarmTime(raw)
+                val res = if (hour != null && minute != null) {
+                    phoneManager.setAlarm(hour, minute, label = "MAX Alarm", isUserInitiated = true)
+                } else {
+                    phoneManager.alarmManager.showAlarms(isUserInitiated = true).map { "" }
+                }
+                val msg = res.fold(
+                    onSuccess = { formatted ->
+                        if (formatted.isNotBlank()) {
+                            if (isBn) "$formatted-এ অ্যালার্ম সেট করার স্ক্রিন খোলা হয়েছে।" else "Opened alarm setup for $formatted."
+                        } else {
+                            if (isBn) "অ্যালার্ম স্ক্রিন খোলা হয়েছে।" else "Opened your alarms."
+                        }
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to set alarm." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Alarm", isOffline = isOffline)
+            }
+
+            AssistantActionType.SET_TIMER -> {
+                val raw = decision.targetName.orEmpty()
+                val seconds = parseTimerSeconds(raw)
+                val res = phoneManager.startTimer(seconds, label = "MAX Timer", isUserInitiated = true)
+                val msg = res.fold(
+                    onSuccess = { secs ->
+                        val mins = secs / 60
+                        if (isBn) {
+                            if (mins > 0) "$mins মিনিটের টাইমার সেট করা হচ্ছে।" else "$secs সেকেন্ডের টাইমার সেট করা হচ্ছে।"
+                        } else {
+                            if (mins > 0) "Setting timer for $mins minute(s)." else "Setting timer for $secs second(s)."
+                        }
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to start timer." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Timer", isOffline = isOffline)
+            }
+
+            AssistantActionType.STOPWATCH_CONTROL -> {
+                val action = decision.targetName ?: "start"
+                val elapsed = phoneManager.controlStopwatch(action, isUserInitiated = true)
+                val msg = if (isBn) {
+                    "স্টপওয়াচ ($action): বর্তমান সময় $elapsed।"
+                } else {
+                    "Stopwatch $action: elapsed $elapsed."
+                }
+                respondAsMax(msg, lang, actionBadge = "Stopwatch", isOffline = isOffline)
+            }
+
+            AssistantActionType.CALCULATE -> {
+                val expr = decision.targetName.orEmpty()
+                val res = phoneManager.calculate(expr)
+                val msg = res.fold(
+                    onSuccess = { ans ->
+                        if (isBn) "$expr-এর ফলাফল হলো $ans।" else "The result of $expr is $ans."
+                    },
+                    onFailure = {
+                        if (isBn) "হিসাবটি বুঝতে পারিনি। ক্যালকুলেটর খুলতে বলুন অথবা স্পষ্ট সংখ্যা দিন।"
+                        else "I couldn't evaluate that expression. Please try again with numbers."
+                    }
+                )
+                respondAsMax(msg, lang, actionBadge = "Calculator", isOffline = isOffline)
             }
 
             AssistantActionType.VOLUME_UP -> {
@@ -662,16 +731,12 @@ class MAXCore private constructor(
 
             AssistantActionType.OPEN_APP -> {
                 val target = decision.targetName.orEmpty()
-                val res = repository.openInstalledApp(target)
-                val msg = res.fold(
-                    onSuccess = { appLabel ->
-                        if (isBn) "$appLabel খোলা হচ্ছে।" else "Opening $appLabel."
-                    },
-                    onFailure = {
-                        if (isBn) "দুঃখিত, আপনার ফোনে '$target' অ্যাপটি খুঁজে পাইনি।"
-                        else "I couldn't find an installed app named '$target' on your phone."
-                    }
+                val outcome = appManager.openApp(
+                    appQuery = target,
+                    isUserInitiated = true,
+                    isBengali = isBn
                 )
+                val msg = appManager.formatOutcomeMessage(outcome, isBn)
                 respondAsMax(msg, lang, actionBadge = "App Launcher", isOffline = isOffline)
             }
 
@@ -1064,6 +1129,28 @@ class MAXCore private constructor(
 
     fun hasPermission(permission: String): Boolean = permissionManager.hasPermission(permission)
 
+    private fun parseAlarmTime(raw: String): Pair<Int?, Int?> {
+        val match = Regex("""(\d{1,2})(?::(\d{2}))?\s*(am|pm)?""", RegexOption.IGNORE_CASE).find(raw)
+            ?: return null to null
+        var hour = match.groupValues[1].toIntOrNull() ?: return null to null
+        val minute = match.groupValues[2].toIntOrNull() ?: 0
+        val meridiem = match.groupValues[3].lowercase()
+        if (meridiem == "pm" && hour in 1..11) hour += 12
+        if (meridiem == "am" && hour == 12) hour = 0
+        return if (hour in 0..23 && minute in 0..59) hour to minute else null to null
+    }
+
+    private fun parseTimerSeconds(raw: String): Int {
+        val match = Regex("""(\d+)\s*(sec|second|seconds|min|minute|minutes|hour|hours|সেকেন্ড|মিনিট|ঘণ্টা)?""", RegexOption.IGNORE_CASE).find(raw)
+        val amount = match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 60
+        val unit = match?.groupValues?.getOrNull(2)?.lowercase().orEmpty()
+        return when {
+            unit.startsWith("hour") || unit.contains("ঘণ্টা") -> amount * 3600
+            unit.startsWith("sec") || unit.contains("সেকেন্ড") -> amount
+            else -> amount * 60
+        }.coerceAtLeast(1)
+    }
+
     companion object {
         private const val TAG = "MAXCore"
 
@@ -1073,16 +1160,19 @@ class MAXCore private constructor(
         fun getInstance(context: Context): MAXCore {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
+                val permMgr = PermissionManager(appContext)
                 INSTANCE ?: MAXCore(
                     wakeWordManager = WakeWordManager(appContext),
                     speechManager = SpeechManager(appContext),
                     ttsManager = TTSManagerWrapper(appContext),
                     memoryManager = MemoryManager(appContext),
-                    permissionManager = PermissionManager(appContext),
+                    permissionManager = permMgr,
                     settingsManager = SettingsManager(appContext),
                     repository = AssistantRepository(appContext),
                     emotionManager = EmotionManager(),
-                    conversationManager = ConversationManager()
+                    conversationManager = ConversationManager(),
+                    phoneManager = PhoneManager(appContext, permMgr),
+                    appManager = AppManager(appContext, permMgr)
                 ).also { INSTANCE = it }
             }
         }
