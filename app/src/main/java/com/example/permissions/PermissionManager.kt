@@ -8,7 +8,8 @@ import androidx.core.content.ContextCompat
 
 /**
  * Independent manager responsible for querying Android runtime permission states
- * and determining which permissions are missing for microphone, contacts, phone, SMS, camera, and notifications.
+ * and determining which permissions are missing for microphone, contacts, phone,
+ * SMS, camera, gallery/media, files, location, notifications, and internet.
  */
 class PermissionManager(context: Context) {
     private val appContext = context.applicationContext
@@ -28,13 +29,44 @@ class PermissionManager(context: Context) {
 
     fun hasCameraPermission(): Boolean = hasPermission(Manifest.permission.CAMERA)
 
+    fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            true
+        }
+    }
+
+    fun hasMediaPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasPermission(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            hasPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    fun hasFilePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasPermission(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            hasPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    fun hasLocationPermission(): Boolean {
+        return hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    fun hasInternetPermission(): Boolean = hasPermission(Manifest.permission.INTERNET)
+
     fun missingPermissionsForBackgroundWake(): List<String> {
         val needed = mutableListOf<String>()
         if (!hasMicrophonePermission()) {
             needed.add(Manifest.permission.RECORD_AUDIO)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+            !hasNotificationPermission()
         ) {
             needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -47,11 +79,15 @@ class PermissionManager(context: Context) {
             Manifest.permission.READ_CONTACTS to hasContactsPermission(),
             Manifest.permission.CALL_PHONE to hasCallPermission(),
             Manifest.permission.SEND_SMS to hasSmsPermission(),
-            Manifest.permission.CAMERA to hasCameraPermission()
+            Manifest.permission.CAMERA to hasCameraPermission(),
+            Manifest.permission.INTERNET to hasInternetPermission(),
+            Manifest.permission.ACCESS_FINE_LOCATION to hasLocationPermission()
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            map[Manifest.permission.POST_NOTIFICATIONS] =
-                hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+            map[Manifest.permission.POST_NOTIFICATIONS] = hasNotificationPermission()
+            map[Manifest.permission.READ_MEDIA_IMAGES] = hasMediaPermission()
+        } else {
+            map[Manifest.permission.READ_EXTERNAL_STORAGE] = hasFilePermission()
         }
         return map
     }
