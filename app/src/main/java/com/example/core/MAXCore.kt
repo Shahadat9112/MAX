@@ -21,7 +21,14 @@ import com.example.permissions.PermissionManager
 import com.example.repository.AssistantRepository
 import com.example.settings.SettingsManager
 import com.example.speech.SpeechManager
-import com.example.tts.TTSManager
+import com.example.conversation.ConversationManager
+import com.example.conversation.ConversationState
+import com.example.conversation.FarewellManager
+import com.example.conversation.GreetingManager
+import com.example.emotion.EmotionManager
+import com.example.tts.SpeechStyle
+import com.example.tts.TTSManagerWrapper
+import com.example.tts.VoiceState
 import com.example.ui.MaxUiState
 import com.example.utils.PrivacyUtils
 import com.example.wakeword.VoiceConversationConnector
@@ -55,11 +62,13 @@ import kotlinx.coroutines.launch
 class MAXCore private constructor(
     val wakeWordManager: WakeWordManager,
     val speechManager: SpeechManager,
-    val ttsManager: TTSManager,
+    val ttsManager: TTSManagerWrapper,
     val memoryManager: MemoryManager,
     val permissionManager: PermissionManager,
     val settingsManager: SettingsManager,
-    val repository: AssistantRepository
+    val repository: AssistantRepository,
+    val emotionManager: EmotionManager,
+    val conversationManager: ConversationManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -86,6 +95,27 @@ class MAXCore private constructor(
         override fun onWakeWordDetected(event: WakeWordDetectionEvent) {
             _wakeDetectionEvents.tryEmit(event)
             prepareAssistantForWakeResponse(event)
+        }
+    }
+
+    private val conversationListener = object : com.example.wakeword.VoiceConversationConnector {
+        override fun onReadyForConversation(event: WakeWordDetectionEvent) {
+            val greeting = conversationManager.startGreeting()
+            scope.launch {
+                respondAsMax(greeting, "bn", actionBadge = "MAX Greeting")
+            }
+        }
+
+        override fun onSpeechRecognitionRequested(triggerSource: String) {
+            startVoiceListening()
+        }
+
+        override fun onConversationEnded() {
+            val farewell = conversationManager.getFarewellMessage()
+            scope.launch {
+                respondAsMax(farewell, "bn", actionBadge = "MAX Farewell")
+            }
+            conversationManager.reset()
         }
     }
 
@@ -162,6 +192,7 @@ class MAXCore private constructor(
 
     init {
         wakeWordManager.addListener(wakeListener)
+        wakeWordManager.attachConversationConnector(conversationListener)
 
         scope.launch {
             settingsManager.preferencesFlow
@@ -180,7 +211,20 @@ class MAXCore private constructor(
                 if (shouldListen && !_isCameraOpen.value) {
                     startVoiceListening()
                 } else {
-                    wakeWordManager.notifyConversationEnded()
+                    if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP) {
+                        // Wait for user response; if idle timeout occurs, farewell plays
+                        mainHandler.postDelayed({
+                            scope.launch {
+                                if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP) {
+                                    val timeoutMsg = conversationManager.getIdleTimeoutMessage()
+                                    respondAsMax(timeoutMsg, "bn", actionBadge = "Idle Timeout")
+                                    wakeWordManager.notifyConversationEnded()
+                                }
+                            }
+                        }, 12_000L)
+                    } else {
+                        wakeWordManager.notifyConversationEnded()
+                    }
                 }
             }
         }
@@ -202,12 +246,19 @@ class MAXCore private constructor(
     }
 
     fun handleWakeWordTriggered(command: String) {
-        wakeWordManager.dispatchWakeDetected(
-            WakeWordDetectionEvent(
-                wakeWord = WakeWordConfig.DEFAULT_WAKE_WORD,
-                trailingCommand = command
+        if (command.isBlank()) {
+            val greeting = conversationManager.startGreeting()
+            scope.launch {
+                respondAsMax(greeting, "bn", actionBadge = "MAX Greeting")
+            }
+        } else {
+            wakeWordManager.dispatchWakeDetected(
+                WakeWordDetectionEvent(
+                    wakeWord = WakeWordConfig.DEFAULT_WAKE_WORD,
+                    trailingCommand = command
+                )
             )
-        )
+        }
     }
 
     private fun prepareAssistantForWakeResponse(event: WakeWordDetectionEvent) {
@@ -216,15 +267,8 @@ class MAXCore private constructor(
             wakeWordManager.setForegroundMicBusy(true)
             val command = event.trailingCommand
             if (command.isBlank()) {
-                val isBn = uiState.value.preferences.preferredLanguage == VoiceLanguage.BENGALI
-                val prompt = if (isBn) "হ্যাঁ, বলুন।" else "Yes, I'm listening."
-                pendingVoiceFollowUpAfterTts = true
-                if (uiState.value.preferences.ttsEnabled) {
-                    ttsManager.speak(prompt, if (isBn) "bn" else "en")
-                } else {
-                    pendingVoiceFollowUpAfterTts = false
-                    startVoiceListening()
-                }
+                val greeting = conversationManager.startGreeting()
+                respondAsMax(greeting, "bn", actionBadge = "MAX Greeting")
             } else {
                 submitUserInput(command, fromVoice = true)
             }
@@ -343,6 +387,7 @@ class MAXCore private constructor(
         }
 
         scope.launch {
+            emotionManager.evaluateAndSetEmotion(trimmed)
             val userLang = when {
                 PrivacyUtils.isBengaliText(cleanInput) -> "bn"
                 spokenLanguageHint == "bn" -> "bn"
@@ -894,9 +939,24 @@ class MAXCore private constructor(
             isOffline = isOffline
         )
         if (uiState.value.preferences.ttsEnabled) {
+            val style = emotionManager.responseStyle.value.speechStyle
+            ttsManager.setSpeechStyle(style)
             ttsManager.speak(text, language)
         } else {
             pendingVoiceFollowUpAfterTts = false
+        }
+
+        // If this was a task response, queue follow-up asking Sanju if anything else is needed
+        if (actionBadge != null && actionBadge != "MAX Greeting" && actionBadge != "MAX Farewell" && actionBadge != "Idle Timeout") {
+            val followUp = conversationManager.getTaskCompletedPrompt()
+            mainHandler.postDelayed({
+                scope.launch {
+                    memoryManager.addMessage(isUser = false, text = followUp, language = "bn", actionBadge = "Follow-up")
+                    if (uiState.value.preferences.ttsEnabled) {
+                        ttsManager.speak(followUp, "bn")
+                    }
+                }
+            }, 2500L)
         }
     }
 
@@ -1016,11 +1076,13 @@ class MAXCore private constructor(
                 INSTANCE ?: MAXCore(
                     wakeWordManager = WakeWordManager(appContext),
                     speechManager = SpeechManager(appContext),
-                    ttsManager = TTSManager(appContext),
+                    ttsManager = TTSManagerWrapper(appContext),
                     memoryManager = MemoryManager(appContext),
                     permissionManager = PermissionManager(appContext),
                     settingsManager = SettingsManager(appContext),
-                    repository = AssistantRepository(appContext)
+                    repository = AssistantRepository(appContext),
+                    emotionManager = EmotionManager(),
+                    conversationManager = ConversationManager()
                 ).also { INSTANCE = it }
             }
         }

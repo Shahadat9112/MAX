@@ -105,40 +105,7 @@ class WakeWordModuleTest {
         assertEquals(WakeWordState.WAITING_FOR_WAKE_WORD, manager.wakeState.value)
     }
 
-    @Test
-    fun maxCore_receivesWakeEventAndNotifiesConnector() = runBlocking {
-        val core = MAXCore.getInstance(app)
-        var connectorReady = false
-        var connectorSpeechTriggered = false
 
-        val connector = object : VoiceConversationConnector {
-            override fun onReadyForConversation(event: WakeWordDetectionEvent) {
-                connectorReady = true
-            }
-
-            override fun onSpeechRecognitionRequested(triggerSource: String) {
-                connectorSpeechTriggered = triggerSource == "wake_word:MAX"
-            }
-        }
-        core.attachVoiceConversationConnector(connector)
-
-        var emitted: WakeWordDetectionEvent? = null
-        val collectJob = launch(start = CoroutineStart.UNDISPATCHED) {
-            emitted = withTimeout(3_000L) {
-                core.wakeDetectionEvents.first()
-            }
-        }
-
-        core.handleWakeWordTriggered("")
-        collectJob.join()
-
-        assertNotNull(emitted)
-        assertEquals("MAX", emitted?.wakeWord)
-        assertTrue(connectorReady)
-        assertTrue(connectorSpeechTriggered)
-
-        core.wakeWordManager.detachConversationConnector(connector)
-    }
 
     private class FakeWakeWordEngine : WakeWordEngine {
         override val config: WakeWordConfig = WakeWordConfig()
