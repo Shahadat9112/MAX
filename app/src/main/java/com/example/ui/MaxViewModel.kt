@@ -26,6 +26,7 @@ data class MaxUiState(
     val pendingAction: PendingAction? = null,
     val isCameraOpen: Boolean = false,
     val autoCaptureOnCameraOpen: Boolean = false,
+    val useFrontCameraOnOpen: Boolean = false,
     val lastCapturedPhotoUri: Uri? = null,
     val isWakeServiceRunning: Boolean = false,
     val wakeServiceStatusText: String = "Standby",

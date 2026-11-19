@@ -27,7 +27,46 @@ object OfflineCommandEngine {
             )
         }
 
-        // 2. Open Camera
+        // 2. Selfie, Video Recording, QR Scan & Open Camera
+        if (matchesAny(
+                lower,
+                "selfie mode", "take a selfie", "open selfie", "front camera", "selfie",
+                "সেলফি তোলো", "সেলফি মোড", "সেলফি", "ফ্রন্ট ক্যামেরা"
+            )
+        ) {
+            return AiDecision(
+                reply = if (isBn) "সেলফি ক্যামেরা চালু করছি।" else "Opening selfie camera.",
+                language = lang,
+                action = AssistantActionType.OPEN_SELFIE
+            )
+        }
+
+        if (matchesAny(
+                lower,
+                "record video", "start video", "video recording", "video mode", "shoot video",
+                "ভিডিও করো", "ভিডিও রেকর্ডিং", "ভিডিও চালু করো", "ভিডিও"
+            )
+        ) {
+            return AiDecision(
+                reply = if (isBn) "ভিডিও রেকর্ডিং প্রস্তুত করছি।" else "Opening video recording.",
+                language = lang,
+                action = AssistantActionType.RECORD_VIDEO
+            )
+        }
+
+        if (matchesAny(
+                lower,
+                "scan qr", "qr code", "qr scanner", "scan barcode",
+                "কিউআর কোড", "কিউআর স্ক্যান", "qr স্ক্যান"
+            )
+        ) {
+            return AiDecision(
+                reply = if (isBn) "কিউআর কোড স্ক্যানার চালু করছি।" else "Opening QR code scanner.",
+                language = lang,
+                action = AssistantActionType.SCAN_QR
+            )
+        }
+
         if (matchesAny(
                 lower,
                 "open camera", "launch camera", "start camera", "camera",
@@ -142,6 +181,32 @@ object OfflineCommandEngine {
             )
         }
 
+        // 7.1 Find Contact (English + Bengali)
+        val findContactEn = Regex("""^(?:find|search|lookup|look up|get)\s+(?:contact|number\s+for|phone\s+number\s+for)\s+(.+)$""", RegexOption.IGNORE_CASE)
+        findContactEn.find(text)?.let { match ->
+            val name = match.groupValues[1].trim()
+            if (name.isNotBlank()) {
+                return AiDecision(
+                    reply = "Searching your contacts for $name.",
+                    language = "en",
+                    action = AssistantActionType.FIND_CONTACT,
+                    targetName = name
+                )
+            }
+        }
+        val findContactBn = Regex("""^(.+?)(?:-এর|\s+এর|\s+র)?\s*(?:নম্বর|নাম্বার|কন্টাক্ট)\s*(?:খোঁজো|দেখাও|দাও|বলো)$""")
+        findContactBn.find(text)?.let { match ->
+            val name = match.groupValues[1].trim()
+            if (name.isNotBlank()) {
+                return AiDecision(
+                    reply = "আপনার কন্টাক্ট লিস্টে $name খুঁজছি।",
+                    language = "bn",
+                    action = AssistantActionType.FIND_CONTACT,
+                    targetName = name
+                )
+            }
+        }
+
         // 7. Call Contact (English + Bengali flexible order)
         val callRegexEn = Regex("""^(?:please\s+)?(?:call|dial|phone|ring)\s+(?:my\s+)?(.+)$""", RegexOption.IGNORE_CASE)
         callRegexEn.find(text)?.let { match ->
@@ -224,33 +289,106 @@ object OfflineCommandEngine {
             }
         }
 
-        // 9. Open Installed App
-        val openAppRegexEn = Regex("""^(?:please\s+)?(?:open|launch|start)\s+(.+)$""", RegexOption.IGNORE_CASE)
-        openAppRegexEn.find(text)?.let { match ->
-            val appName = match.groupValues[1].trim()
-            if (appName.isNotBlank()) {
-                return AiDecision(
-                    reply = "Opening $appName.",
-                    language = "en",
-                    action = AssistantActionType.OPEN_APP,
-                    targetName = appName
-                )
-            }
+        // 8.5 Gallery, Files & Smart Features (Translation, Reminder, Notes, Voice Notes, Calendar, Suggestions, Web Search)
+        if (matchesAny(
+                lower,
+                "open gallery", "show photos", "find photos", "search photos",
+                "গ্যালারি খোলো", "গ্যালারি দেখাও", "গ্যালারি", "ছবি খোঁজো"
+            )
+        ) {
+            return AiDecision(
+                reply = if (isBn) "গ্যালারি প্রস্তুত করছি।" else "Opening photo picker.",
+                language = lang,
+                action = AssistantActionType.OPEN_GALLERY
+            )
         }
-        val openAppRegexBn = Regex("""^(.+?)\s*(?:খোলো|খুলো|চালু করো|ওপেন করো)$""")
-        openAppRegexBn.find(text)?.let { match ->
-            val appName = match.groupValues[1].trim()
-            if (appName.isNotBlank()) {
+
+        if (matchesAny(
+                lower,
+                "open files", "browse files", "read pdf", "read document", "ocr", "extract text",
+                "ফাইল খোলো", "ফাইল দেখাও", "পিডিএফ", "ডকুমেন্ট", "ইমেজ থেকে লেখা", "ছবি থেকে লেখা"
+            )
+        ) {
+            return AiDecision(
+                reply = if (isBn) "নিরাপদ ফাইল ব্রাউজার খুলছি।" else "Opening file browser.",
+                language = lang,
+                action = AssistantActionType.OPEN_FILES
+            )
+        }
+
+        if (lower.contains("translate") || lower.contains("অনুবাদ")) {
+            return AiDecision(
+                reply = "",
+                language = lang,
+                action = AssistantActionType.TRANSLATE,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("reminder") || lower.contains("remind me") || lower.contains("রিমাইন্ডার")) {
+            return AiDecision(
+                reply = if (isBn) "রিমাইন্ডার প্রস্তুত করছি।" else "Preparing reminder.",
+                language = lang,
+                action = AssistantActionType.SET_REMINDER,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("voice note") || lower.contains("ভয়েস নোট")) {
+            return AiDecision(
+                reply = if (isBn) "ভয়েস নোট সংরক্ষণ করছি।" else "Saving voice note.",
+                language = lang,
+                action = AssistantActionType.VOICE_NOTE,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("take a note") || lower.contains("save a note") || lower.contains("write a note") ||
+            lower.contains("নোট লিখে") || lower.contains("নোট রাখ") || lower.contains("নোট সেভ")
+        ) {
+            return AiDecision(
+                reply = if (isBn) "নোট সংরক্ষণ করছি।" else "Saving your note.",
+                language = lang,
+                action = AssistantActionType.ADD_NOTE,
+                targetName = text
+            )
+        }
+
+        if (lower.contains("calendar") || lower.contains("ক্যালেন্ডার")) {
+            return AiDecision(
+                reply = if (isBn) "আজকের ক্যালেন্ডার দেখাচ্ছি।" else "Opening today's calendar.",
+                language = lang,
+                action = AssistantActionType.SHOW_CALENDAR
+            )
+        }
+
+        if (matchesAny(
+                lower,
+                "suggest something", "any suggestion", "suggestions", "smart suggestion",
+                "সাজেশন দাও", "পরামর্শ দাও", "কিছু পরামর্শ"
+            )
+        ) {
+            return AiDecision(
+                reply = "",
+                language = lang,
+                action = AssistantActionType.AI_SUGGESTION
+            )
+        }
+
+        val searchRegex = Regex("""^(?:search\s+(?:google\s+)?(?:for\s+)?|google\s+|সার্চ\s*করো\s+)(.+)$""", RegexOption.IGNORE_CASE)
+        searchRegex.find(text)?.let { match ->
+            val query = match.groupValues[1].trim()
+            if (query.isNotBlank()) {
                 return AiDecision(
-                    reply = "$appName খুলছি।",
-                    language = "bn",
-                    action = AssistantActionType.OPEN_APP,
-                    targetName = appName
+                    reply = if (isBn) "\"$query\" সার্চ করছি।" else "Searching for $query.",
+                    language = lang,
+                    action = AssistantActionType.WEB_SEARCH,
+                    targetName = query
                 )
             }
         }
 
-        // 9.5 Alarm, Timer, Stopwatch & Calculator (English + Bengali)
+        // 8.8 Alarm, Timer, Stopwatch & Calculator (English + Bengali) — must precede generic Open App
         if (lower.contains("alarm") || lower.contains("অ্যালার্ম") || lower.contains("এলার্ম")) {
             return AiDecision(
                 reply = if (isBn) "অ্যালার্ম প্রস্তুত করছি।" else "Preparing alarm.",
@@ -294,6 +432,32 @@ object OfflineCommandEngine {
                     language = lang,
                     action = AssistantActionType.CALCULATE,
                     targetName = expr
+                )
+            }
+        }
+
+        // 9. Open Installed App
+        val openAppRegexEn = Regex("""^(?:please\s+)?(?:open|launch|start)\s+(.+)$""", RegexOption.IGNORE_CASE)
+        openAppRegexEn.find(text)?.let { match ->
+            val appName = match.groupValues[1].trim()
+            if (appName.isNotBlank()) {
+                return AiDecision(
+                    reply = "Opening $appName.",
+                    language = "en",
+                    action = AssistantActionType.OPEN_APP,
+                    targetName = appName
+                )
+            }
+        }
+        val openAppRegexBn = Regex("""^(.+?)\s*(?:খোলো|খুলো|চালু করো|ওপেন করো)$""")
+        openAppRegexBn.find(text)?.let { match ->
+            val appName = match.groupValues[1].trim()
+            if (appName.isNotBlank()) {
+                return AiDecision(
+                    reply = "$appName খুলছি।",
+                    language = "bn",
+                    action = AssistantActionType.OPEN_APP,
+                    targetName = appName
                 )
             }
         }

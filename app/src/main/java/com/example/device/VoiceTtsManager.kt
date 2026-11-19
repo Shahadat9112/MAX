@@ -92,8 +92,8 @@ class VoiceTtsManager(context: Context) {
 
         val isBengali = languageHint == "bn" || WakeWordParser.isBengaliText(text)
         val locale = if (isBengali) {
-            val bd = Locale("bn", "BD")
-            val indian = Locale("bn", "IN")
+            val bd = Locale.forLanguageTag("bn-BD")
+            val indian = Locale.forLanguageTag("bn-IN")
             when {
                 engine.isLanguageAvailable(bd) >= TextToSpeech.LANG_AVAILABLE -> bd
                 engine.isLanguageAvailable(indian) >= TextToSpeech.LANG_AVAILABLE -> indian

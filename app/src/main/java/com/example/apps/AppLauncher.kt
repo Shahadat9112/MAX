@@ -111,7 +111,19 @@ class AppLauncher(context: Context) {
                 pkg.lowercase().contains(query.replace(" ", "")) ||
                     query.contains(label.lowercase())
             }
-            ?: return Result.failure(IllegalStateException("App '$appQuery' is not installed on this device."))
+
+        if (matched == null) {
+            if (query in setOf("phone", "dialer", "telephone", "call", "ফোন", "ডায়ালার")) {
+                return runCatching {
+                    val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    appContext.startActivity(dialIntent)
+                    "Phone"
+                }
+            }
+            return Result.failure(IllegalStateException("App '$appQuery' is not installed on this device."))
+        }
 
         val launchIntent = pm.getLaunchIntentForPackage(matched.second)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

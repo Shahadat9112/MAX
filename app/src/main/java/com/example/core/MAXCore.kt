@@ -13,20 +13,26 @@ import com.example.domain.AiDecision
 import com.example.domain.AssistantActionType
 import com.example.domain.AssistantStatus
 import com.example.apps.AppManager
+import com.example.camera.CameraManager
 import com.example.domain.ContactMatch
 import com.example.domain.PendingAction
 import com.example.domain.PrivacyGuard
 import com.example.domain.VoiceLanguage
+import com.example.files.FileManager
+import com.example.gallery.GalleryManager
+import com.example.internet.InternetManager
 import com.example.memory.MemoryManager
 import com.example.permissions.PermissionManager
 import com.example.phone.PhoneManager
 import com.example.repository.AssistantRepository
 import com.example.settings.SettingsManager
+import com.example.smart.SmartFeatureManager
 import com.example.speech.SpeechManager
 import com.example.conversation.ConversationManager
 import com.example.conversation.ConversationState
 import com.example.conversation.FarewellManager
 import com.example.conversation.GreetingManager
+import com.example.conversation.PersonalityManager
 import com.example.emotion.EmotionManager
 import com.example.tts.SpeechStyle
 import com.example.tts.TTSManagerWrapper
@@ -57,7 +63,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Central application-scoped assistant coordinator that composes all independent
- * MAX managers (WakeWord, Speech, TTS, Memory, Permission, Settings, Phone, App) and the AssistantRepository.
+ * MAX modules into one privacy-first Android AI Assistant:
+ * WakeWord, Speech, TTS, Conversation/Personality, Emotion, Memory, Permission, Settings,
+ * Camera, Gallery, Internet, Phone, App, Files, and SmartFeatures.
  *
  * Serves as the single source of truth for both the MVVM ViewModel layer and background services.
  */
@@ -72,7 +80,12 @@ class MAXCore private constructor(
     val emotionManager: EmotionManager,
     val conversationManager: ConversationManager,
     val phoneManager: PhoneManager,
-    val appManager: AppManager
+    val appManager: AppManager,
+    val cameraManager: CameraManager,
+    val galleryManager: GalleryManager,
+    val internetManager: InternetManager,
+    val fileManager: FileManager,
+    val smartFeatureManager: SmartFeatureManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -81,6 +94,7 @@ class MAXCore private constructor(
     private val _pendingAction = MutableStateFlow<PendingAction?>(null)
     private val _isCameraOpen = MutableStateFlow(false)
     private val _autoCapture = MutableStateFlow(false)
+    private val _useFrontCamera = MutableStateFlow(false)
     private val _lastPhotoUri = MutableStateFlow<Uri?>(null)
     private val _permissionHealth = MutableStateFlow(permissionManager.computePermissionHealth())
     private val _bannerError = MutableStateFlow<String?>(null)
@@ -88,12 +102,34 @@ class MAXCore private constructor(
     private val _permissionRequests = MutableSharedFlow<Array<String>>(extraBufferCapacity = 4)
     val permissionRequests: SharedFlow<Array<String>> = _permissionRequests.asSharedFlow()
 
+    private val _mediaPickerRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
+    val mediaPickerRequests: SharedFlow<Unit> = _mediaPickerRequests.asSharedFlow()
+
+    private val _fileBrowserRequests = MutableSharedFlow<Array<String>>(extraBufferCapacity = 2)
+    val fileBrowserRequests: SharedFlow<Array<String>> = _fileBrowserRequests.asSharedFlow()
+
+    private val _videoCaptureRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
+    val videoCaptureRequests: SharedFlow<Unit> = _videoCaptureRequests.asSharedFlow()
+
     private val _wakeDetectionEvents = MutableSharedFlow<WakeWordDetectionEvent>(extraBufferCapacity = 4)
     val wakeDetectionEvents: SharedFlow<WakeWordDetectionEvent> = _wakeDetectionEvents.asSharedFlow()
 
     private var lastCommandToRetryAfterPermission: String? = null
     private var pendingSmsToSendAfterPermission: PendingAction.ConfirmSms? = null
     private var pendingVoiceFollowUpAfterTts = false
+
+    private val idleTimeoutRunnable = Runnable {
+        scope.launch {
+            if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP &&
+                !uiState.value.status.let { it == AssistantStatus.LISTENING || it == AssistantStatus.THINKING || it == AssistantStatus.SPEAKING }
+            ) {
+                val timeoutMsg = conversationManager.getIdleTimeoutMessage()
+                respondAsMax(timeoutMsg, "bn", actionBadge = "Idle Timeout")
+                releaseTransientTaskResources()
+                wakeWordManager.notifyConversationEnded()
+            }
+        }
+    }
 
     private val wakeListener = object : WakeWordListener {
         override fun onWakeWordDetected(event: WakeWordDetectionEvent) {
@@ -136,6 +172,7 @@ class MAXCore private constructor(
         _pendingAction,
         _isCameraOpen,
         _autoCapture,
+        _useFrontCamera,
         _lastPhotoUri,
         wakeWordManager.isServiceRunning,
         wakeWordManager.lastHeardStatus,
@@ -155,12 +192,13 @@ class MAXCore private constructor(
         val pending = values[9] as PendingAction?
         val cameraOpen = values[10] as Boolean
         val autoCap = values[11] as Boolean
-        val lastPhoto = values[12] as Uri?
-        val wakeRunning = values[13] as Boolean
-        val wakeText = values[14] as String
+        val frontCam = values[12] as Boolean
+        val lastPhoto = values[13] as Uri?
+        val wakeRunning = values[14] as Boolean
+        val wakeText = values[15] as String
         @Suppress("UNCHECKED_CAST")
-        val perms = values[15] as Map<String, Boolean>
-        val error = values[16] as String?
+        val perms = values[16] as Map<String, Boolean>
+        val error = values[17] as String?
 
         val status = when {
             listening -> AssistantStatus.LISTENING
@@ -182,6 +220,7 @@ class MAXCore private constructor(
             pendingAction = pending,
             isCameraOpen = cameraOpen,
             autoCaptureOnCameraOpen = autoCap,
+            useFrontCameraOnOpen = frontCam,
             lastCapturedPhotoUri = lastPhoto,
             isWakeServiceRunning = wakeRunning,
             wakeServiceStatusText = wakeText,
@@ -214,21 +253,12 @@ class MAXCore private constructor(
                 pendingVoiceFollowUpAfterTts = false
                 if (shouldListen && !_isCameraOpen.value) {
                     startVoiceListening()
+                } else if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP) {
+                    mainHandler.removeCallbacks(idleTimeoutRunnable)
+                    mainHandler.postDelayed(idleTimeoutRunnable, 12_000L)
                 } else {
-                    if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP) {
-                        // Wait for user response; if idle timeout occurs, farewell plays
-                        mainHandler.postDelayed({
-                            scope.launch {
-                                if (conversationManager.conversationState.value == ConversationState.AWAITING_FOLLOW_UP) {
-                                    val timeoutMsg = conversationManager.getIdleTimeoutMessage()
-                                    respondAsMax(timeoutMsg, "bn", actionBadge = "Idle Timeout")
-                                    wakeWordManager.notifyConversationEnded()
-                                }
-                            }
-                        }, 12_000L)
-                    } else {
-                        wakeWordManager.notifyConversationEnded()
-                    }
+                    releaseTransientTaskResources()
+                    wakeWordManager.notifyConversationEnded()
                 }
             }
         }
@@ -379,6 +409,7 @@ class MAXCore private constructor(
     ) {
         val trimmed = rawText.trim()
         if (trimmed.isEmpty()) return
+        mainHandler.removeCallbacks(idleTimeoutRunnable)
         _bannerError.value = null
 
         val cleanInput = wakeWordManager.stripOptionalWakeWord(trimmed)
@@ -741,11 +772,86 @@ class MAXCore private constructor(
             }
 
             AssistantActionType.OPEN_CAMERA -> {
-                openCameraScreen(autoCapture = false, language = lang, isOffline = isOffline)
+                openCameraScreen(autoCapture = false, language = lang, isOffline = isOffline, useFrontCamera = false)
+            }
+
+            AssistantActionType.OPEN_SELFIE -> {
+                openCameraScreen(autoCapture = true, language = lang, isOffline = isOffline, useFrontCamera = true)
             }
 
             AssistantActionType.TAKE_PHOTO -> {
-                openCameraScreen(autoCapture = true, language = lang, isOffline = isOffline)
+                openCameraScreen(autoCapture = true, language = lang, isOffline = isOffline, useFrontCamera = false)
+            }
+
+            AssistantActionType.RECORD_VIDEO -> {
+                if (!permissionManager.hasCameraPermission()) {
+                    lastCommandToRetryAfterPermission = "record video"
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA))
+                    respondAsMax(
+                        if (isBn) "ভিডিও রেকর্ড করতে ক্যামেরা অনুমতি দিন।" else "Please grant Camera permission to record video.",
+                        lang,
+                        actionBadge = "Permission",
+                        isOffline = isOffline
+                    )
+                    return
+                }
+                cameraManager.requestOpenCameraController(autoCapture = false)
+                cameraManager.startVideoRecording()
+                _videoCaptureRequests.tryEmit(Unit)
+                respondAsMax(
+                    if (isBn) "ভিডিও রেকর্ডিং ক্যামেরা খোলা হচ্ছে।" else "Opening video recorder.",
+                    lang,
+                    actionBadge = "Video",
+                    isOffline = isOffline
+                )
+            }
+
+            AssistantActionType.SCAN_QR -> {
+                if (!permissionManager.hasCameraPermission()) {
+                    lastCommandToRetryAfterPermission = "scan qr"
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA))
+                    respondAsMax(
+                        if (isBn) "কিউআর কোড স্ক্যান করতে ক্যামেরা অনুমতি দিন।" else "Please grant Camera permission to scan QR codes.",
+                        lang,
+                        actionBadge = "Permission",
+                        isOffline = isOffline
+                    )
+                    return
+                }
+                cameraManager.requestOpenCameraController(autoCapture = false)
+                cameraManager.startQrScanning()
+                _useFrontCamera.value = false
+                _autoCapture.value = false
+                _isCameraOpen.value = true
+                respondAsMax(
+                    if (isBn) "কিউআর কোড স্ক্যান করার জন্য ক্যামেরা চালু করা হয়েছে।" else "Camera opened for QR scanning.",
+                    lang,
+                    actionBadge = "QR Scanner",
+                    isOffline = isOffline
+                )
+            }
+
+            AssistantActionType.FIND_CONTACT -> {
+                val target = decision.targetName.orEmpty()
+                if (!permissionManager.hasContactsPermission()) {
+                    lastCommandToRetryAfterPermission = "find contact $target"
+                    requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS))
+                    respondAsMax(
+                        if (isBn) "কন্টাক্ট খুঁজে পেতে কন্টাক্টস অনুমতি দিন।" else "Please grant Contacts permission to search contacts.",
+                        lang,
+                        actionBadge = "Permission",
+                        isOffline = isOffline
+                    )
+                    return
+                }
+                val matches = phoneManager.findContacts(target, isUserInitiated = true)
+                val msg = if (matches.isEmpty()) {
+                    if (isBn) "\"$target\" নামে কোনো কন্টাক্ট পাওয়া যায়নি।" else "I couldn't find \"$target\" in your contacts."
+                } else {
+                    val top = matches.first()
+                    if (isBn) "${top.name}-এর নম্বর হলো ${top.phoneNumber}।" else "${top.name}'s number is ${top.phoneNumber}."
+                }
+                respondAsMax(msg, lang, actionBadge = "Contacts", isOffline = isOffline)
             }
 
             AssistantActionType.CALL_CONTACT -> {
@@ -865,6 +971,133 @@ class MAXCore private constructor(
                 }
             }
 
+            AssistantActionType.TRANSLATE -> {
+                val raw = decision.targetName.orEmpty()
+                val targetLang = smartFeatureManager.translationManager.inferTargetLanguage(raw)
+                val extractedPayload = smartFeatureManager.translationManager.extractPayload(raw)
+                val payloadToTranslate = extractedPayload.ifBlank {
+                    uiState.value.messages.lastOrNull {
+                        it.isUser && !it.text.contains("অনুবাদ") && !it.text.contains("translate", ignoreCase = true)
+                    }?.text.orEmpty()
+                }
+                if (payloadToTranslate.isBlank()) {
+                    val promptMsg = if (isBn) {
+                        "কী অনুবাদ করতে চান? অনুগ্রহ করে টেক্সটটি বলুন বা লিখুন (যেমন: \"এটা বাংলা থেকে ইংরেজিতে অনুবাদ করো: আমি ভালো আছি\")।"
+                    } else {
+                        "What text would you like me to translate? Please say or type it."
+                    }
+                    respondAsMax(promptMsg, lang, actionBadge = "Translation", isOffline = isOffline)
+                    return
+                }
+                val res = smartFeatureManager.translateText(
+                    rawCommandOrText = payloadToTranslate,
+                    targetLanguage = targetLang,
+                    isOnline = !isOffline && internetManager.isNetworkConnected()
+                )
+                val msg = res.getOrElse { err ->
+                    err.localizedMessage ?: if (isBn) "অনুবাদ করা যায়নি।" else "Unable to translate."
+                }
+                respondAsMax(msg, targetLang, actionBadge = "Translation", isOffline = isOffline)
+            }
+
+            AssistantActionType.SET_REMINDER -> {
+                val raw = decision.targetName.orEmpty()
+                val res = smartFeatureManager.createReminder(
+                    rawCommand = raw,
+                    isUserInitiated = true,
+                    openClockUi = true
+                )
+                val msg = res.fold(
+                    onSuccess = { item ->
+                        if (isBn) "সানজু, ${item.formattedTime}-এর জন্য রিমাইন্ডার প্রস্তুত করা হয়েছে।"
+                        else "Sanju, reminder prepared for ${item.formattedTime}."
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to set reminder." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Reminder", isOffline = isOffline)
+            }
+
+            AssistantActionType.ADD_NOTE -> {
+                val raw = decision.targetName.orEmpty()
+                val res = smartFeatureManager.saveNote(
+                    content = raw,
+                    isUserInitiated = true,
+                    isVoiceNote = fromVoice
+                )
+                val msg = res.fold(
+                    onSuccess = {
+                        if (isBn) "নোটটি নিরাপদে সংরক্ষণ করা হয়েছে।" else "Note saved safely."
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to save note." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Note", isOffline = isOffline)
+            }
+
+            AssistantActionType.VOICE_NOTE -> {
+                val raw = decision.targetName.orEmpty()
+                val res = smartFeatureManager.saveNote(
+                    content = raw,
+                    isUserInitiated = true,
+                    isVoiceNote = true
+                )
+                val msg = res.fold(
+                    onSuccess = {
+                        if (isBn) "ভয়েস নোটটি নিরাপদে সংরক্ষণ করা হয়েছে।" else "Voice note saved safely."
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to save voice note." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Voice Note", isOffline = isOffline)
+            }
+
+            AssistantActionType.SHOW_CALENDAR -> {
+                val res = smartFeatureManager.openTodaysCalendar(isUserInitiated = true)
+                val msg = res.fold(
+                    onSuccess = { smartFeatureManager.calendarManager.getTodaySummaryMessage(isBn) },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to open calendar." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Calendar", isOffline = isOffline)
+            }
+
+            AssistantActionType.AI_SUGGESTION -> {
+                val suggestion = smartFeatureManager.getContextualSuggestion(isBn)
+                respondAsMax(suggestion, lang, actionBadge = "Suggestion", isOffline = isOffline)
+            }
+
+            AssistantActionType.OPEN_GALLERY -> {
+                val opened = galleryManager.openGallery(isUserInitiated = true)
+                val msg = if (opened) {
+                    _mediaPickerRequests.tryEmit(Unit)
+                    if (isBn) "আপনার অনুরোধে গ্যালারি (ফটো পিকার) খোলা হচ্ছে।" else "Opening photo gallery at your request."
+                } else {
+                    if (isBn) "গ্যালারি খোলার জন্য আপনার অনুমতি প্রয়োজন।" else "Explicit permission is required to open gallery."
+                }
+                respondAsMax(msg, lang, actionBadge = "Gallery", isOffline = isOffline)
+            }
+
+            AssistantActionType.OPEN_FILES -> {
+                val intent = fileManager.createBrowseFilesIntent(isUserInitiated = true)
+                val msg = if (intent != null) {
+                    _fileBrowserRequests.tryEmit(arrayOf("application/pdf", "text/*", "image/*"))
+                    if (isBn) "নিরাপদ ফাইল ব্রাউজার খোলা হচ্ছে — আপনি কোন ফাইলটি পড়তে চান বেছে নিন।"
+                    else "Opening file browser — select a PDF, document, or image for MAX to inspect."
+                } else {
+                    if (isBn) "ফাইল অ্যাক্সেসের জন্য আপনার অনুমতি প্রয়োজন।" else "Explicit user permission is required to browse files."
+                }
+                respondAsMax(msg, lang, actionBadge = "Files", isOffline = isOffline)
+            }
+
+            AssistantActionType.WEB_SEARCH -> {
+                val query = decision.targetName.orEmpty()
+                val res = internetManager.openWebSearch(query, isUserInitiated = true)
+                val msg = res.fold(
+                    onSuccess = {
+                        if (isBn) "\"$query\"-এর জন্য ব্রাউজারে সার্চ খোলা হয়েছে।" else "Opened web search for \"$query\"."
+                    },
+                    onFailure = { err -> err.localizedMessage ?: "Unable to open browser search." }
+                )
+                respondAsMax(msg, lang, actionBadge = "Web Search", isOffline = isOffline)
+            }
+
             AssistantActionType.CLEAR_CHAT -> {
                 memoryManager.clearMemory()
                 _pendingAction.value = null
@@ -872,10 +1105,15 @@ class MAXCore private constructor(
         }
     }
 
-    fun openCameraScreen(autoCapture: Boolean, language: String = "en", isOffline: Boolean = false) {
+    fun openCameraScreen(
+        autoCapture: Boolean,
+        language: String = "en",
+        isOffline: Boolean = false,
+        useFrontCamera: Boolean = false
+    ) {
         scope.launch {
             if (!permissionManager.hasCameraPermission()) {
-                lastCommandToRetryAfterPermission = if (autoCapture) "take a picture" else "open camera"
+                lastCommandToRetryAfterPermission = if (useFrontCamera) "take a selfie" else if (autoCapture) "take a picture" else "open camera"
                 requestPermissions(arrayOf(Manifest.permission.CAMERA))
                 respondAsMax(
                     if (language == "bn") "ক্যামেরা ব্যবহার করতে ক্যামেরা অনুমতি দিন।"
@@ -885,12 +1123,14 @@ class MAXCore private constructor(
                 )
                 return@launch
             }
+            cameraManager.requestOpenCameraController(autoCapture)
+            _useFrontCamera.value = useFrontCamera
             _autoCapture.value = autoCapture
             _isCameraOpen.value = true
-            val msg = if (autoCapture) {
-                if (language == "bn") "ক্যামেরা খুলে ছবি তুলছি।" else "Taking a picture now."
-            } else {
-                if (language == "bn") "ক্যামেরা চালু করা হয়েছে।" else "Camera is open."
+            val msg = when {
+                useFrontCamera -> if (language == "bn") "সেলফি ক্যামেরা চালু করা হয়েছে।" else "Opening selfie camera."
+                autoCapture -> if (language == "bn") "ক্যামেরা খুলে ছবি তুলছি।" else "Taking a picture now."
+                else -> if (language == "bn") "ক্যামেরা চালু করা হয়েছে।" else "Camera is open."
             }
             respondAsMax(msg, language, actionBadge = "Camera", isOffline = isOffline)
         }
@@ -906,6 +1146,51 @@ class MAXCore private constructor(
         }
     }
 
+    fun onGalleryPhotoSelected(uri: Uri) {
+        galleryManager.onPhotoPicked(uri)
+        _lastPhotoUri.value = uri
+        scope.launch {
+            val isBn = uiState.value.preferences.preferredLanguage == VoiceLanguage.BENGALI
+            val msg = if (isBn) "ছবিটি গ্যালারি থেকে নির্বাচন করা হয়েছে।" else "Selected photo from gallery."
+            respondAsMax(msg, if (isBn) "bn" else "en", actionBadge = "Gallery Photo")
+        }
+    }
+
+    fun onFileSelected(uri: Uri) {
+        scope.launch {
+            val isBn = uiState.value.preferences.preferredLanguage == VoiceLanguage.BENGALI
+            val res = fileManager.openSelectedFile(uri, isUserInitiated = true)
+            val msg = res.fold(
+                onSuccess = { state ->
+                    val name = state.selectedDocument?.displayName ?: "file"
+                    val preview = state.extractedTextPreview?.take(180)
+                    when {
+                        !preview.isNullOrBlank() -> if (isBn) "$name পড়া হয়েছে:\n$preview" else "Loaded $name:\n$preview"
+                        state.pdfPageCount > 0 -> if (isBn) "PDF '$name' লোড হয়েছে (${state.pdfPageCount} পৃষ্ঠা)।" else "Loaded PDF '$name' (${state.pdfPageCount} pages)."
+                        else -> state.statusMessage ?: if (isBn) "'$name' খোলা হয়েছে।" else "Opened '$name'."
+                    }
+                },
+                onFailure = { err ->
+                    err.localizedMessage ?: if (isBn) "ফাইলটি পড়া যায়নি।" else "Unable to read the selected file."
+                }
+            )
+            respondAsMax(msg, if (isBn) "bn" else "en", actionBadge = "Files")
+        }
+    }
+
+    fun onVideoRecorded(success: Boolean) {
+        scope.launch {
+            cameraManager.closeCamera()
+            val isBn = uiState.value.preferences.preferredLanguage == VoiceLanguage.BENGALI
+            val msg = if (success) {
+                if (isBn) "ভিডিওটি আপনার গ্যালারিতে সংরক্ষণ করা হয়েছে।" else "Video saved to your gallery."
+            } else {
+                if (isBn) "ভিডিও রেকর্ডিং বাতিল করা হয়েছে।" else "Video recording cancelled."
+            }
+            respondAsMax(msg, if (isBn) "bn" else "en", actionBadge = "Video")
+        }
+    }
+
     fun onCameraError(errorMsg: String) {
         _autoCapture.value = false
         _bannerError.value = errorMsg
@@ -914,6 +1199,8 @@ class MAXCore private constructor(
     fun closeCamera() {
         _isCameraOpen.value = false
         _autoCapture.value = false
+        _useFrontCamera.value = false
+        cameraManager.closeCamera()
     }
 
     fun confirmPendingCall() {
@@ -996,9 +1283,10 @@ class MAXCore private constructor(
         actionBadge: String? = null,
         isOffline: Boolean = false
     ) {
+        val naturalText = PersonalityManager.formatAssistantReply(text)
         memoryManager.addMessage(
             isUser = false,
-            text = text,
+            text = naturalText,
             language = language,
             actionBadge = actionBadge,
             isOffline = isOffline
@@ -1006,19 +1294,24 @@ class MAXCore private constructor(
         if (uiState.value.preferences.ttsEnabled) {
             val style = emotionManager.responseStyle.value.speechStyle
             ttsManager.setSpeechStyle(style)
-            ttsManager.speak(text, language)
+            ttsManager.speak(naturalText, language)
         } else {
             pendingVoiceFollowUpAfterTts = false
         }
 
         // If this was a task response, queue follow-up asking Sanju if anything else is needed
-        if (actionBadge != null && actionBadge != "MAX Greeting" && actionBadge != "MAX Farewell" && actionBadge != "Idle Timeout") {
+        if (actionBadge != null && actionBadge != "MAX Greeting" && actionBadge != "MAX Farewell" &&
+            actionBadge != "Idle Timeout" && actionBadge != "Follow-up"
+        ) {
             val followUp = conversationManager.getTaskCompletedPrompt()
             mainHandler.postDelayed({
                 scope.launch {
                     memoryManager.addMessage(isUser = false, text = followUp, language = "bn", actionBadge = "Follow-up")
                     if (uiState.value.preferences.ttsEnabled) {
                         ttsManager.speak(followUp, "bn")
+                    } else {
+                        mainHandler.removeCallbacks(idleTimeoutRunnable)
+                        mainHandler.postDelayed(idleTimeoutRunnable, 12_000L)
                     }
                 }
             }, 2500L)
@@ -1129,6 +1422,15 @@ class MAXCore private constructor(
 
     fun hasPermission(permission: String): Boolean = permissionManager.hasPermission(permission)
 
+    /** Releases transient task resources to optimize battery, CPU, and RAM after completing tasks. */
+    fun releaseTransientTaskResources() {
+        cameraManager.closeCamera()
+        galleryManager.closeGallery()
+        appManager.release()
+        fileManager.release()
+        smartFeatureManager.release()
+    }
+
     private fun parseAlarmTime(raw: String): Pair<Int?, Int?> {
         val match = Regex("""(\d{1,2})(?::(\d{2}))?\s*(am|pm)?""", RegexOption.IGNORE_CASE).find(raw)
             ?: return null to null
@@ -1161,18 +1463,25 @@ class MAXCore private constructor(
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
                 val permMgr = PermissionManager(appContext)
+                val emotionMgr = EmotionManager()
+                val memMgr = MemoryManager(appContext)
                 INSTANCE ?: MAXCore(
                     wakeWordManager = WakeWordManager(appContext),
                     speechManager = SpeechManager(appContext),
                     ttsManager = TTSManagerWrapper(appContext),
-                    memoryManager = MemoryManager(appContext),
+                    memoryManager = memMgr,
                     permissionManager = permMgr,
                     settingsManager = SettingsManager(appContext),
                     repository = AssistantRepository(appContext),
-                    emotionManager = EmotionManager(),
+                    emotionManager = emotionMgr,
                     conversationManager = ConversationManager(),
                     phoneManager = PhoneManager(appContext, permMgr),
-                    appManager = AppManager(appContext, permMgr)
+                    appManager = AppManager(appContext, permMgr),
+                    cameraManager = CameraManager(appContext, permMgr),
+                    galleryManager = GalleryManager(appContext, permMgr),
+                    internetManager = InternetManager(appContext, permMgr),
+                    fileManager = FileManager(appContext, permMgr),
+                    smartFeatureManager = SmartFeatureManager(appContext, permMgr, emotionMgr, memMgr)
                 ).also { INSTANCE = it }
             }
         }

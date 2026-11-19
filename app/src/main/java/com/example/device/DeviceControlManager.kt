@@ -149,8 +149,9 @@ class DeviceControlManager(private val context: Context) {
     fun getCurrentTimeMessage(isBengali: Boolean): String {
         val now = Date()
         return if (isBengali) {
-            val timeStr = SimpleDateFormat("h:mm a", Locale("bn", "BD")).format(now)
-            val dateStr = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("bn", "BD")).format(now)
+            val bnLocale = Locale.forLanguageTag("bn-BD")
+            val timeStr = SimpleDateFormat("h:mm a", bnLocale).format(now)
+            val dateStr = SimpleDateFormat("EEEE, d MMMM yyyy", bnLocale).format(now)
             "এখন সময় $timeStr। আজ $dateStr।"
         } else {
             val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(now)

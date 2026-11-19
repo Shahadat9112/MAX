@@ -2,10 +2,12 @@
     <string name="app_name">MAX AI</string>
     <string name="assistant_name">MAX</string>
     <string name="wake_word_badge">Wake: \"MAX\"</string>
-    <string name="status_idle">Say \"MAX\" or tap mic</string>
+    <string name="status_idle">Waiting…</string>
     <string name="status_listening">Listening…</string>
     <string name="status_thinking">Thinking…</string>
     <string name="status_speaking">Speaking…</string>
+    <string name="greeting_bn">আসসালামু আলাইকুম, সানজু</string>
+    <string name="greeting_en">Welcome Back, Sanju</string>
     <string name="input_placeholder">Ask MAX in English or বাংলা…</string>
     <string name="send_message">Send message</string>
     <string name="voice_command">Start voice command</string>

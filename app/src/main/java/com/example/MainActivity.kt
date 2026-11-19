@@ -1,12 +1,17 @@
 package com.example
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,8 +52,14 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            statusBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
         )
 
         handleWakeIntent(intent)
@@ -67,6 +78,28 @@ class MainActivity : ComponentActivity() {
                     }
                 )
 
+                val photoPickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) {
+                        viewModel.onGalleryPhotoSelected(uri)
+                    }
+                }
+
+                val fileBrowserLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        viewModel.onFileSelected(uri)
+                    }
+                }
+
+                val videoCaptureLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    viewModel.onVideoRecorded(result.resultCode == Activity.RESULT_OK)
+                }
+
                 // Launch Accompanist multi-permission prompt on initial launch if any permissions
                 // are not yet granted, or ensure background MAX wake service starts immediately.
                 LaunchedEffect(Unit) {
@@ -77,6 +110,26 @@ class MainActivity : ComponentActivity() {
                         multiplePermissionsState.launchMultiplePermissionRequest()
                     } else {
                         viewModel.ensureBackgroundWakeService()
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    viewModel.mediaPickerRequests.collect {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    viewModel.fileBrowserRequests.collect { mimeTypes ->
+                        fileBrowserLauncher.launch(mimeTypes)
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    viewModel.videoCaptureRequests.collect {
+                        videoCaptureLauncher.launch(Intent(MediaStore.ACTION_VIDEO_CAPTURE))
                     }
                 }
 

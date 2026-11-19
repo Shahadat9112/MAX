@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,20 +27,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.VolumeOff
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -52,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,7 +67,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -73,17 +76,21 @@ import com.example.ui.components.AccompanistPermissionBanner
 import com.example.ui.components.CameraCaptureOverlay
 import com.example.ui.components.ChatArea
 import com.example.ui.components.ConfirmationCard
+import com.example.ui.components.LastCompletedTaskCard
 import com.example.ui.components.MaxAiOrb
+import com.example.ui.components.MaxBrandLogo
+import com.example.ui.components.MaxGreetingHeaderCard
+import com.example.ui.components.MaxQuickActionStrip
 import com.example.ui.components.SettingsSheet
 import com.example.ui.theme.AlertRed
-import com.example.ui.theme.DarkBlueCard
 import com.example.ui.theme.DeepNavySurface
 import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.IceBlueText
+import com.example.ui.theme.LightCanvasBottom
+import com.example.ui.theme.LightCanvasTop
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.ObsidianBlack
-import com.example.ui.theme.SlateBlueSecondary
-import com.example.ui.theme.SubtleBlueBorder
+import com.example.ui.theme.RoyalIndigo
+import com.example.ui.theme.VioletPulse
 import com.example.ui.theme.WarningAmber
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
@@ -120,18 +127,39 @@ fun MaxAssistantScreen(
     var inputText by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
 
+    val isDark = isSystemInDarkTheme()
+    val backgroundBrush = if (isDark) {
+        Brush.verticalGradient(
+            colors = listOf(
+                ObsidianBlack,
+                DeepNavySurface,
+                RoyalIndigo.copy(alpha = 0.22f),
+                ObsidianBlack
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                LightCanvasTop,
+                Color(0xFFEDF2FF),
+                LightCanvasBottom
+            )
+        )
+    }
+
+    val lastCompletedTask by remember(uiState.messages) {
+        derivedStateOf {
+            uiState.messages.lastOrNull {
+                !it.isUser && !it.isError && it.actionBadge != null &&
+                    it.actionBadge != "MAX Greeting" && it.actionBadge != "Follow-up"
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        ObsidianBlack,
-                        DeepNavySurface,
-                        ObsidianBlack
-                    )
-                )
-            )
+            .background(backgroundBrush)
     ) {
         Scaffold(
             containerColor = Color.Transparent,
@@ -171,7 +199,7 @@ fun MaxAssistantScreen(
                 if (isWide) {
                     Row(
                         modifier = Modifier
-                            .widthIn(max = 1100.dp)
+                            .widthIn(max = 1120.dp)
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
                     ) {
@@ -179,20 +207,24 @@ fun MaxAssistantScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                             modifier = Modifier
-                                .weight(0.44f)
+                                .weight(0.45f)
                                 .fillMaxHeight()
-                                .padding(12.dp)
+                                .padding(10.dp)
                         ) {
+                            MaxGreetingHeaderCard(
+                                preferredLanguage = uiState.preferences.preferredLanguage
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
                             MaxAiOrb(
                                 status = uiState.status,
                                 audioLevel = uiState.audioLevel,
                                 preferredLanguage = uiState.preferences.preferredLanguage,
                                 activeSpeechLocale = uiState.activeSpeechLocale,
                                 onCycleLanguage = onCycleLanguage,
-                                orbSize = 210.dp,
+                                orbSize = 196.dp,
                                 onOrbClick = onToggleMic
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             AccompanistPermissionBanner(
                                 multiplePermissionsState = multiplePermissionsState,
                                 hasRequestedPermissionsBefore = hasRequestedPermissionsBefore,
@@ -211,10 +243,23 @@ fun MaxAssistantScreen(
                         }
                         Column(
                             modifier = Modifier
-                                .weight(0.56f)
+                                .weight(0.55f)
                                 .fillMaxHeight()
                         ) {
                             ErrorBanner(uiState.bannerError, onDismissBannerError)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            MaxQuickActionStrip(
+                                onOpenCamera = onOpenCamera,
+                                onOpenGallery = { onSendText("MAX, গ্যালারি খোলো") },
+                                onOpenBrowser = { onSendText("MAX, Chrome খোলো") },
+                                onOpenPhone = { onSendText("MAX, open Phone") },
+                                onOpenWhatsApp = { onSendText("MAX, WhatsApp খোলো") },
+                                onCreateNote = { onSendText("MAX, একটা নোট লিখে রাখো।") },
+                                onCreateReminder = { onSendText("MAX, আগামীকাল সকাল ৮টার জন্য রিমাইন্ডার দাও।") },
+                                onOpenSettings = { showSettings = true }
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LastCompletedTaskCard(lastTaskMessage = lastCompletedTask)
                             ChatArea(
                                 messages = uiState.messages,
                                 partialTranscript = uiState.partialTranscript,
@@ -224,13 +269,30 @@ fun MaxAssistantScreen(
                         }
                     }
                 } else {
+                    val isCompactHeight = maxHeight < 520.dp
+                    val adaptiveOrbSize = when {
+                        maxHeight < 420.dp -> 92.dp
+                        uiState.pendingAction != null || isCompactHeight -> 120.dp
+                        else -> 152.dp
+                    }
+                    val portraitModifier = Modifier
+                        .widthIn(max = 680.dp)
+                        .fillMaxSize()
+                        .let { base ->
+                            if (isCompactHeight) base.verticalScroll(rememberScrollState()) else base
+                        }
+
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .widthIn(max = 680.dp)
-                            .fillMaxSize()
+                        modifier = portraitModifier
                     ) {
                         ErrorBanner(uiState.bannerError, onDismissBannerError)
+
+                        MaxGreetingHeaderCard(
+                            preferredLanguage = uiState.preferences.preferredLanguage
+                        )
+
+                        Spacer(modifier = Modifier.height(if (isCompactHeight) 2.dp else 6.dp))
 
                         AccompanistPermissionBanner(
                             multiplePermissionsState = multiplePermissionsState,
@@ -244,10 +306,25 @@ fun MaxAssistantScreen(
                             preferredLanguage = uiState.preferences.preferredLanguage,
                             activeSpeechLocale = uiState.activeSpeechLocale,
                             onCycleLanguage = onCycleLanguage,
-                            orbSize = if (uiState.pendingAction != null) 140.dp else 168.dp,
+                            orbSize = adaptiveOrbSize,
                             onOrbClick = onToggleMic,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)
+                            modifier = Modifier.padding(vertical = 2.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(if (isCompactHeight) 4.dp else 6.dp))
+
+                        MaxQuickActionStrip(
+                            onOpenCamera = onOpenCamera,
+                            onOpenGallery = { onSendText("MAX, গ্যালারি খোলো") },
+                            onOpenBrowser = { onSendText("MAX, Chrome খোলো") },
+                            onOpenPhone = { onSendText("MAX, open Phone") },
+                            onOpenWhatsApp = { onSendText("MAX, WhatsApp খোলো") },
+                            onCreateNote = { onSendText("MAX, একটা নোট লিখে রাখো।") },
+                            onCreateReminder = { onSendText("MAX, আগামীকাল সকাল ৮টার জন্য রিমাইন্ডার দাও।") },
+                            onOpenSettings = { showSettings = true }
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         AnimatedVisibility(
                             visible = uiState.pendingAction != null,
@@ -266,11 +343,19 @@ fun MaxAssistantScreen(
                             }
                         }
 
+                        LastCompletedTaskCard(lastTaskMessage = lastCompletedTask)
+
                         ChatArea(
                             messages = uiState.messages,
                             partialTranscript = uiState.partialTranscript,
                             onQuickPromptClick = onSendText,
-                            modifier = Modifier.weight(1f)
+                            modifier = if (isCompactHeight) {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                            } else {
+                                Modifier.weight(1f)
+                            }
                         )
                     }
                 }
@@ -280,6 +365,7 @@ fun MaxAssistantScreen(
         if (uiState.isCameraOpen) {
             CameraCaptureOverlay(
                 autoCapture = uiState.autoCaptureOnCameraOpen,
+                useFrontCamera = uiState.useFrontCameraOnOpen,
                 lastCapturedUri = uiState.lastCapturedPhotoUri,
                 onPhotoCaptured = onPhotoCaptured,
                 onError = onCameraError,
@@ -316,31 +402,31 @@ private fun MaxTopBar(
     onOpenCamera: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "MAX AI",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = IceBlueText
-            )
+            MaxBrandLogo()
 
             Surface(
                 shape = RoundedCornerShape(50),
-                color = if (uiState.isWakeServiceRunning) ElectricBlue.copy(alpha = 0.2f) else DarkBlueCard,
+                color = if (uiState.isWakeServiceRunning) {
+                    scheme.primary.copy(alpha = 0.16f)
+                } else {
+                    scheme.surfaceVariant
+                },
                 border = BorderStroke(
                     width = 1.dp,
-                    color = if (uiState.isWakeServiceRunning) NeonCyan else SubtleBlueBorder
+                    color = if (uiState.isWakeServiceRunning) NeonCyan else scheme.outline
                 ),
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
@@ -354,14 +440,14 @@ private fun MaxTopBar(
                     Icon(
                         imageVector = Icons.Rounded.Hearing,
                         contentDescription = "Wake word toggle",
-                        tint = if (uiState.isWakeServiceRunning) NeonCyan else SlateBlueSecondary,
+                        tint = if (uiState.isWakeServiceRunning) NeonCyan else scheme.onSurfaceVariant,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
                         text = if (uiState.isWakeServiceRunning) "MAX • ON" else "Wake: \"MAX\"",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (uiState.isWakeServiceRunning) NeonCyan else SlateBlueSecondary
+                        color = if (uiState.isWakeServiceRunning) scheme.primary else scheme.onSurfaceVariant
                     )
                 }
             }
@@ -401,9 +487,9 @@ private fun MaxTopBar(
                     .testTag("tts_toggle_button")
             ) {
                 Icon(
-                    imageVector = if (uiState.preferences.ttsEnabled) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                    imageVector = if (uiState.preferences.ttsEnabled) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
                     contentDescription = stringResource(R.string.toggle_voice),
-                    tint = if (uiState.preferences.ttsEnabled) NeonCyan else SlateBlueSecondary
+                    tint = if (uiState.preferences.ttsEnabled) scheme.primary else scheme.onSurfaceVariant
                 )
             }
             IconButton(
@@ -415,7 +501,7 @@ private fun MaxTopBar(
                 Icon(
                     imageVector = Icons.Rounded.CameraAlt,
                     contentDescription = stringResource(R.string.open_camera),
-                    tint = IceBlueText
+                    tint = scheme.onBackground
                 )
             }
             IconButton(
@@ -427,7 +513,7 @@ private fun MaxTopBar(
                 Icon(
                     imageVector = Icons.Rounded.Tune,
                     contentDescription = stringResource(R.string.open_settings),
-                    tint = IceBlueText
+                    tint = scheme.onBackground
                 )
             }
         }
@@ -436,10 +522,11 @@ private fun MaxTopBar(
 
 @Composable
 private fun ErrorBanner(error: String?, onDismiss: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     AnimatedVisibility(visible = !error.isNullOrBlank()) {
         Surface(
             shape = RoundedCornerShape(14.dp),
-            color = AlertRed.copy(alpha = 0.16f),
+            color = AlertRed.copy(alpha = 0.14f),
             border = BorderStroke(1.dp, AlertRed.copy(alpha = 0.55f)),
             modifier = Modifier
                 .fillMaxWidth()
@@ -452,11 +539,11 @@ private fun ErrorBanner(error: String?, onDismiss: () -> Unit) {
                 Text(
                     text = error.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = IceBlueText,
+                    color = scheme.onBackground,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(onClick = onDismiss) {
-                    Text("Dismiss", color = NeonCyan)
+                    Text("Dismiss", color = scheme.primary)
                 }
             }
         }
@@ -471,12 +558,14 @@ private fun MaxBottomDock(
     onSendClick: () -> Unit,
     onMicClick: () -> Unit
 ) {
+    val scheme = MaterialTheme.colorScheme
     val isListening = status == AssistantStatus.LISTENING
 
     Surface(
-        color = DeepNavySurface.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, SubtleBlueBorder.copy(alpha = 0.7f)),
+        color = scheme.surface.copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.55f)),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        tonalElevation = 6.dp,
         modifier = Modifier
             .fillMaxWidth()
             .imePadding()
@@ -495,7 +584,7 @@ private fun MaxBottomDock(
                 placeholder = {
                     Text(
                         text = stringResource(R.string.input_placeholder),
-                        color = SlateBlueSecondary,
+                        color = scheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },
@@ -503,12 +592,12 @@ private fun MaxBottomDock(
                 shape = RoundedCornerShape(26.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = ElectricBlue,
-                    unfocusedBorderColor = SubtleBlueBorder,
-                    focusedTextColor = IceBlueText,
-                    unfocusedTextColor = IceBlueText,
-                    focusedContainerColor = DarkBlueCard,
-                    unfocusedContainerColor = DarkBlueCard,
-                    cursorColor = NeonCyan
+                    unfocusedBorderColor = scheme.outline,
+                    focusedTextColor = scheme.onSurface,
+                    unfocusedTextColor = scheme.onSurface,
+                    focusedContainerColor = scheme.surfaceVariant,
+                    unfocusedContainerColor = scheme.surfaceVariant,
+                    cursorColor = VioletPulse
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSendClick() }),
@@ -521,7 +610,7 @@ private fun MaxBottomDock(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.Send,
                                 contentDescription = stringResource(R.string.send_message),
-                                tint = NeonCyan
+                                tint = scheme.primary
                             )
                         }
                     }
@@ -535,7 +624,7 @@ private fun MaxBottomDock(
                 onClick = onMicClick,
                 shape = CircleShape,
                 containerColor = if (isListening) AlertRed else ElectricBlue,
-                contentColor = if (isListening) IceBlueText else ObsidianBlack,
+                contentColor = Color.White,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .size(56.dp)

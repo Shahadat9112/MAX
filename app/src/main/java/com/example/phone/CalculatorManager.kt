@@ -19,7 +19,10 @@ class CalculatorManager(context: Context) {
      * Evaluates a clean math expression and returns a formatted numeric result.
      */
     fun evaluate(expression: String): Result<String> {
-        val normalized = expression
+        val bnDigitsNormalized = expression
+            .replace('০', '0').replace('১', '1').replace('২', '2').replace('৩', '3').replace('৪', '4')
+            .replace('৫', '5').replace('৬', '6').replace('৭', '7').replace('৮', '8').replace('৯', '9')
+        val normalized = bnDigitsNormalized
             .replace("×", "*")
             .replace("÷", "/")
             .replace("x", "*", ignoreCase = true)

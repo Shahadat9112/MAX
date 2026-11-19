@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,17 +39,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.ChatMessageEntity
 import com.example.domain.WakeWordParser
-import com.example.ui.theme.AlertRed
 import com.example.ui.theme.BengaliFontFamily
 import com.example.ui.theme.BodyFontFamily
-import com.example.ui.theme.DarkBlueCard
-import com.example.ui.theme.DeepRoyalBlue
 import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.ElevatedBlueSurface
-import com.example.ui.theme.IceBlueText
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.SlateBlueSecondary
-import com.example.ui.theme.SubtleBlueBorder
+import com.example.ui.theme.VioletPulse
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -104,13 +96,14 @@ private fun EmptyChatState(
     onQuickPromptClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scheme = MaterialTheme.colorScheme
     val suggestions = listOf(
         "MAX, what time is it?",
-        "আমার বাবাকে কল করো",
-        "MAX, take a picture",
-        "Send an SMS to Rahim",
-        "MAX, open YouTube",
-        "আজকের আবহাওয়া ও বিজ্ঞান নিয়ে মজার তথ্য বলো"
+        "আগামীকাল সকাল ৮টার জন্য রিমাইন্ডার দাও",
+        "MAX, এটা বাংলা থেকে ইংরেজিতে অনুবাদ করো",
+        "MAX, WhatsApp খোলো",
+        "আজকের ক্যালেন্ডার দেখাও",
+        "MAX, take a picture"
     )
 
     Column(
@@ -118,27 +111,27 @@ private fun EmptyChatState(
         verticalArrangement = Arrangement.Center,
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 18.dp)
     ) {
         Icon(
             imageVector = Icons.Rounded.AutoAwesome,
             contentDescription = null,
-            tint = ElectricBlue,
-            modifier = Modifier.size(28.dp)
+            tint = scheme.secondary,
+            modifier = Modifier.size(24.dp)
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Ask MAX in English or বাংলা",
+            text = "Suggested Actions for Sanju",
             style = MaterialTheme.typography.titleMedium,
-            color = IceBlueText
+            color = scheme.onBackground
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Wake word is \"MAX\" or \"Hey MAX\". Try a quick command:",
+            text = "Say \"MAX\" anytime or tap a smart suggestion below:",
             style = MaterialTheme.typography.bodyMedium,
-            color = SlateBlueSecondary
+            color = scheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -147,8 +140,9 @@ private fun EmptyChatState(
                 val isBn = WakeWordParser.isBengaliText(prompt)
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = DarkBlueCard,
-                    border = BorderStroke(1.dp, SubtleBlueBorder),
+                    color = scheme.surfaceVariant.copy(alpha = 0.88f),
+                    border = BorderStroke(1.dp, scheme.outline.copy(alpha = 0.65f)),
+                    tonalElevation = 2.dp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .clickable { onQuickPromptClick(prompt) }
@@ -158,7 +152,7 @@ private fun EmptyChatState(
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontFamily = if (isBn) BengaliFontFamily else BodyFontFamily
                         ),
-                        color = IceBlueText,
+                        color = scheme.onSurface,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
                     )
                 }
@@ -169,6 +163,7 @@ private fun EmptyChatState(
 
 @Composable
 private fun ChatBubble(message: ChatMessageEntity) {
+    val scheme = MaterialTheme.colorScheme
     val isBn = message.language == "bn" || WakeWordParser.isBengaliText(message.text)
     val fontFamily = if (isBn) BengaliFontFamily else BodyFontFamily
     val timeText = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(message.timestamp))
@@ -185,18 +180,19 @@ private fun ChatBubble(message: ChatMessageEntity) {
                 bottomEnd = if (message.isUser) 6.dp else 20.dp
             ),
             color = when {
-                message.isError -> AlertRed.copy(alpha = 0.16f)
-                message.isUser -> DeepRoyalBlue.copy(alpha = 0.88f)
-                else -> DarkBlueCard
+                message.isError -> scheme.error.copy(alpha = 0.16f)
+                message.isUser -> scheme.primaryContainer
+                else -> scheme.surfaceVariant
             },
             border = BorderStroke(
                 width = 1.dp,
                 color = when {
-                    message.isError -> AlertRed.copy(alpha = 0.55f)
-                    message.isUser -> ElectricBlue.copy(alpha = 0.6f)
-                    else -> SubtleBlueBorder
+                    message.isError -> scheme.error.copy(alpha = 0.55f)
+                    message.isUser -> scheme.primary.copy(alpha = 0.5f)
+                    else -> scheme.outline.copy(alpha = 0.6f)
                 }
             ),
+            tonalElevation = 1.dp,
             modifier = Modifier
                 .widthIn(max = 310.dp)
                 .testTag(if (message.isUser) "user_chat_bubble" else "max_chat_bubble")
@@ -212,19 +208,19 @@ private fun ChatBubble(message: ChatMessageEntity) {
                             text = "MAX",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = NeonCyan
+                            color = scheme.primary
                         )
                         message.actionBadge?.let { badge ->
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(ElevatedBlueSurface)
+                                    .background(scheme.secondaryContainer)
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = badge,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = ElectricBlue
+                                    color = scheme.secondary
                                 )
                             }
                         }
@@ -232,7 +228,7 @@ private fun ChatBubble(message: ChatMessageEntity) {
                             Icon(
                                 imageVector = Icons.Rounded.CloudOff,
                                 contentDescription = "Offline reply",
-                                tint = SlateBlueSecondary,
+                                tint = scheme.onSurfaceVariant,
                                 modifier = Modifier.size(13.dp)
                             )
                         }
@@ -242,14 +238,14 @@ private fun ChatBubble(message: ChatMessageEntity) {
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyLarge.copy(fontFamily = fontFamily),
-                    color = IceBlueText
+                    color = if (message.isUser) scheme.onPrimaryContainer else scheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = timeText,
                     style = MaterialTheme.typography.labelSmall,
-                    color = SlateBlueSecondary.copy(alpha = 0.8f),
+                    color = scheme.onSurfaceVariant.copy(alpha = 0.8f),
                     modifier = Modifier.align(Alignment.End)
                 )
             }
@@ -259,6 +255,7 @@ private fun ChatBubble(message: ChatMessageEntity) {
 
 @Composable
 private fun PartialTranscriptBubble(text: String) {
+    val scheme = MaterialTheme.colorScheme
     val isBn = WakeWordParser.isBengaliText(text)
     Row(
         horizontalArrangement = Arrangement.End,
@@ -271,8 +268,8 @@ private fun PartialTranscriptBubble(text: String) {
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            DeepRoyalBlue.copy(alpha = 0.45f),
-                            ElectricBlue.copy(alpha = 0.35f)
+                            ElectricBlue.copy(alpha = 0.25f),
+                            VioletPulse.copy(alpha = 0.25f)
                         )
                     )
                 )
@@ -283,7 +280,7 @@ private fun PartialTranscriptBubble(text: String) {
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontFamily = if (isBn) BengaliFontFamily else BodyFontFamily
                 ),
-                color = IceBlueText.copy(alpha = 0.9f)
+                color = scheme.onBackground
             )
         }
     }

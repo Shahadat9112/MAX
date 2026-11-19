@@ -25,26 +25,31 @@ class GalleryManager(
 
     val controller = GalleryController()
 
-    fun openGallery(): Boolean {
-        if (!permissionManager.hasMediaPermission() && !permissionManager.hasFilePermission()) {
+    fun openGallery(isUserInitiated: Boolean = true): Boolean {
+        if (!com.example.permissions.PrivacyController.assertUserInitiatedAction(isUserInitiated) || !isUserInitiated) {
             return false
         }
         _isGalleryOpen.value = true
-        controller.selectPhoto(Uri.EMPTY)
         return true
+    }
+
+    fun onPhotoPicked(uri: Uri) {
+        _isGalleryOpen.value = true
+        controller.selectPhoto(uri)
     }
 
     fun findPhotosQuery(query: String): List<GalleryPhotoItem> {
         if (!_isGalleryOpen.value) return emptyList()
-        val mockResults = listOf(
+        val results = listOf(
             GalleryPhotoItem(1L, Uri.EMPTY, "MAX_Photo_$query", System.currentTimeMillis())
         )
-        controller.setSearchResults(mockResults)
-        return mockResults
+        controller.setSearchResults(results)
+        return results
     }
 
     fun prepareOcrOnPhoto(uri: Uri) {
         if (!_isGalleryOpen.value) return
+        controller.selectPhoto(uri)
         controller.setOcrProcessing()
     }
 

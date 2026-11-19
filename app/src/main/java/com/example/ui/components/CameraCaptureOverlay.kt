@@ -75,6 +75,7 @@ import java.util.Locale
 @Composable
 fun CameraCaptureOverlay(
     autoCapture: Boolean,
+    useFrontCamera: Boolean = false,
     lastCapturedUri: Uri?,
     onPhotoCaptured: (Uri) -> Unit,
     onError: (String) -> Unit,
@@ -86,7 +87,11 @@ fun CameraCaptureOverlay(
 
     BackHandler(onBack = onClose)
 
-    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var lensFacing by remember(useFrontCamera) {
+        mutableIntStateOf(
+            if (useFrontCamera) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+        )
+    }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var isCapturing by remember { mutableStateOf(false) }
     var captureFeedback by remember { mutableStateOf<String?>(null) }

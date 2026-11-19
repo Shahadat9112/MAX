@@ -186,9 +186,9 @@ class TTSManager(context: Context) {
 
     private fun resolveLocale(engine: TextToSpeech, isBengali: Boolean): Locale {
         return if (isBengali) {
-            val bd = Locale("bn", "BD")
-            val indian = Locale("bn", "IN")
-            val generalBn = Locale("bn")
+            val bd = Locale.forLanguageTag("bn-BD")
+            val indian = Locale.forLanguageTag("bn-IN")
+            val generalBn = Locale.forLanguageTag("bn")
             when {
                 engine.isLanguageAvailable(bd) >= TextToSpeech.LANG_AVAILABLE -> bd
                 engine.isLanguageAvailable(indian) >= TextToSpeech.LANG_AVAILABLE -> indian

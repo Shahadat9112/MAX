@@ -13,11 +13,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Sms
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -60,9 +60,10 @@ fun ConfirmationCard(
     onGrantPermission: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scheme = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = DarkBlueCard,
+        color = scheme.surfaceVariant,
         border = BorderStroke(1.2.dp, ElectricBlue.copy(alpha = 0.7f)),
         tonalElevation = 6.dp,
         modifier = modifier
@@ -85,12 +86,12 @@ fun ConfirmationCard(
                             Text(
                                 text = "Confirm Phone Call",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = IceBlueText
+                                color = scheme.onSurface
                             )
                             Text(
                                 text = "${pendingAction.contact.name} • ${pendingAction.contact.phoneNumber}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NeonCyan
+                                color = scheme.primary
                             )
                         }
                     }
@@ -141,67 +142,67 @@ fun ConfirmationCard(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "SMS to ${pendingAction.contact.name}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = IceBlueText
-                        )
-                        Text(
-                            text = "Speak or type your message below.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = SlateBlueSecondary
-                        )
-                    }
-                    IconButton(onClick = onCancel) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Cancel SMS",
-                            tint = SlateBlueSecondary
-                        )
-                    }
-                }
-            }
-
-            is PendingAction.ConfirmSms -> {
-                var editedText by remember(pendingAction.messageBody) {
-                    mutableStateOf(pendingAction.messageBody)
-                }
-
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Sms,
-                            contentDescription = "Review SMS",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Confirm SMS to ${pendingAction.contact.name}",
+                                text = "SMS to ${pendingAction.contact.name}",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = IceBlueText
+                                color = scheme.onSurface
                             )
                             Text(
-                                text = pendingAction.contact.phoneNumber,
+                                text = "Speak or type your message below.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SlateBlueSecondary
+                                color = scheme.onSurfaceVariant
                             )
                         }
-                        IconButton(
-                            onClick = { onReadSmsAloud(editedText, pendingAction.language) },
-                            modifier = Modifier.testTag("read_sms_aloud_button")
+                        IconButton(onClick = onCancel) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Cancel SMS",
+                                tint = scheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                is PendingAction.ConfirmSms -> {
+                    var editedText by remember(pendingAction.messageBody) {
+                        mutableStateOf(pendingAction.messageBody)
+                    }
+
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.VolumeUp,
-                                contentDescription = "Read SMS aloud",
-                                tint = ElectricBlue
+                                imageVector = Icons.Rounded.Sms,
+                                contentDescription = "Review SMS",
+                                tint = scheme.primary,
+                                modifier = Modifier.size(22.dp)
                             )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Confirm SMS to ${pendingAction.contact.name}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = scheme.onSurface
+                                )
+                                Text(
+                                    text = pendingAction.contact.phoneNumber,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = scheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = { onReadSmsAloud(editedText, pendingAction.language) },
+                                modifier = Modifier.testTag("read_sms_aloud_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.VolumeUp,
+                                    contentDescription = "Read SMS aloud",
+                                    tint = ElectricBlue
+                                )
+                            }
                         }
-                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -271,7 +272,7 @@ fun ConfirmationCard(
                     Text(
                         text = pendingAction.rationale,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = IceBlueText,
+                        color = scheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(8.dp))

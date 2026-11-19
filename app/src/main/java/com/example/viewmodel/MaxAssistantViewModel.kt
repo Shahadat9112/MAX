@@ -18,6 +18,9 @@ class MaxAssistantViewModel(application: Application) : AndroidViewModel(applica
 
     val uiState: StateFlow<MaxUiState> = core.uiState
     val permissionRequests: SharedFlow<Array<String>> = core.permissionRequests
+    val mediaPickerRequests: SharedFlow<Unit> = core.mediaPickerRequests
+    val fileBrowserRequests: SharedFlow<Array<String>> = core.fileBrowserRequests
+    val videoCaptureRequests: SharedFlow<Unit> = core.videoCaptureRequests
 
     fun handleWakeWordTriggered(command: String) = core.handleWakeWordTriggered(command)
     fun toggleMicrophone() = core.toggleMicrophone()
@@ -34,6 +37,9 @@ class MaxAssistantViewModel(application: Application) : AndroidViewModel(applica
     fun toggleBackgroundWakeWord(enabled: Boolean) = core.toggleBackgroundWakeWord(enabled)
     fun openCameraScreen(autoCapture: Boolean) = core.openCameraScreen(autoCapture)
     fun onPhotoSaved(uri: Uri) = core.onPhotoSaved(uri)
+    fun onGalleryPhotoSelected(uri: Uri) = core.onGalleryPhotoSelected(uri)
+    fun onFileSelected(uri: Uri) = core.onFileSelected(uri)
+    fun onVideoRecorded(success: Boolean) = core.onVideoRecorded(success)
     fun onCameraError(errorMsg: String) = core.onCameraError(errorMsg)
     fun closeCamera() = core.closeCamera()
     fun confirmPendingCall() = core.confirmPendingCall()

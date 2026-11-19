@@ -264,7 +264,7 @@ class VoiceActivationService : Service() {
                 runCatching {
                     @Suppress("DEPRECATION")
                     val listener = object : PhoneStateListener() {
-                        @Suppress("DEPRECATION")
+                        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
                         override fun onCallStateChanged(state: Int, phoneNumber: String?) {
                             super.onCallStateChanged(state, phoneNumber)
                             val inCall = state == TelephonyManager.CALL_STATE_OFFHOOK ||
